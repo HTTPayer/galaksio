@@ -1,0 +1,7 @@
+*.env
+**notes.txt
+*.venv
+*.claude
+*.egg-info
+**/node_modules
+**/dist

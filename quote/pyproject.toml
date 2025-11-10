@@ -1,0 +1,13 @@
+[project]
+name = "galaksio"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.119.0",
+    "requests",
+    "uvicorn>=0.37.0",
+    "web3>=7.14.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["galaksio", "galaksio.*"]
