@@ -2,6 +2,7 @@
 "use client";
 
 import { CDPReactProvider, type Theme } from "@coinbase/cdp-react";
+import { CDPHooksProvider } from "@coinbase/cdp-hooks";
 import { useIsSignedIn } from "@coinbase/cdp-hooks";
 import { useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -73,11 +74,14 @@ export default function Providers({ children }: ProvidersProps) {
 
   return (
     <CDPReactProvider config={config as any} theme={theme}>
-      <EmbeddedWalletLoader />
-      <Suspense fallback={null}>
-        <AuthRedirect />
-      </Suspense>
-      {children}
+      <CDPHooksProvider config={config as any}>
+        <EmbeddedWalletLoader />
+
+        <Suspense fallback={null}>
+          <AuthRedirect />
+        </Suspense>
+        {children}
+      </CDPHooksProvider>
     </CDPReactProvider>
   );
 }
