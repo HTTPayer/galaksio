@@ -35,7 +35,7 @@ Open [http://galaksio.cloud](http://galaksio.cloud) with your browser to see the
 
 - 🔒 Protected routes (/dashboard, /agents)You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-- 💰 GLX credits from ERC-20 balance
+- 💰 GLX credits from SPL balance
 
 - 🤖 Agent creation modalsThis project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
