@@ -56,7 +56,7 @@ const config = {
 };
 
 export default function Providers({ children }: ProvidersProps) {
-  const projectId = process.env.CDP_PROJECT_ID || "";
+  const projectId = process.env.NEXT_PUBLIC_CDP_PROJECT_ID || "";
 
   // If there's no CDP project id configured (common in local dev), avoid
   // initializing the real CDPReactProvider which will attempt token refresh
