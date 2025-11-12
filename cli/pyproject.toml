@@ -1,0 +1,23 @@
+[project]
+name = "galaksio-cli"
+version = "0.1.0"
+description = "Command-line interface for Galaksio multi-cloud orchestration"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.1.0",
+    "rich>=13.0.0",
+    "x402>=0.2.0",
+    "eth-account>=0.8.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.24.0",
+]
+
+[project.scripts]
+galaksio = "galaksio_cli.cli:cli"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["galaksio_cli", "galaksio_cli.*"]
