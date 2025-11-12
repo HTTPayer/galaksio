@@ -38,6 +38,7 @@ virtualenv/
 .env.*
 !.env.example
 .envrc
+.claude/
 
 # Testing
 .pytest_cache/
