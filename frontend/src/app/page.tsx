@@ -32,9 +32,11 @@ export default function LandingPage() {
               <div className="rounded-2xl border bg-white p-6 shadow-sm">
                 <div className="text-sm text-zinc-600">HTTPayer request example</div>
                 <pre className="mt-3 whitespace-pre-wrap rounded-md bg-zinc-50 p-3 text-sm text-zinc-800">
-{`httpayer call POST https://api.galaksio.cloud/run \
---data '{"script":"print(2+2)"}' \
---group ai-compute`}
+{`# Execute a Python script
+galaksio run analyze_data.py
+
+# Store results permanently
+galaksio store results.json --permanent`}
                 </pre>
               </div>
             </div>
