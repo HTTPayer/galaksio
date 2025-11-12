@@ -1,11 +1,18 @@
 import axios from "axios";
 import { config } from "../utils/config.js";
 import { logger } from "../utils/logger.js";
-import { RunTaskPayload } from "../types.js";
+import { Quote } from "./quoteClient.js";
 
 interface ExecutorRequest {
   jobId: string;
-  payload: RunTaskPayload;
+  taskType?: "store" | "run" | "cache";
+  data?: any;       // for storage
+  code?: string;    // for compute
+  region?: string;  // for cache
+  filename?: string;
+  options?: any;
+  language?: string;
+  payload?: any;    // for orchestration tasks
   quote: any;
 }
 
@@ -16,20 +23,47 @@ export async function runOnExecutor(req: ExecutorRequest) {
   try {
     logger.info(`Sending job ${req.jobId} to executor at ${config.executorUrl}`);
 
+    // Build executor task based on type
+    const task: any = {
+      jobId: req.jobId,
+      taskType: req.taskType,
+      provider: req.quote?.provider || req.quote?.quote?.provider,
+    };
+
+    if (req.taskType === "store") {
+      // Storage task
+      task.fileInline = typeof req.data === "string" ? req.data : JSON.stringify(req.data);
+      task.meta = {
+        fileName: req.filename,
+        // Map provider to operation
+        operation: req.quote.provider === "xcache" ? "set" : "pin-file",
+        ttl: req.options?.ttl,
+        permanent: req.options?.permanent,
+      };
+    } else if (req.taskType === "run") {
+      // Compute task
+      task.fileInline = Buffer.from(req.code || "").toString("base64");
+      task.meta = {
+        snippet: req.code,
+        language: req.language || "python",
+      };
+    } else if (req.taskType === "cache") {
+      // Cache task
+      task.meta = {
+        operation: "create",
+        region: req.region || "us-east-1",
+      };
+    } else if (req.payload) {
+      // Orchestration task with custom payload
+      task.payload = req.payload;
+      task.quote = req.quote;
+    }
+
     const resp = await axios.post(
       `${config.executorUrl}/execute`,
+      task,
       {
-        jobId: req.jobId,
-        taskType: req.payload.taskType,
-        fileUrl: req.payload.fileUrl,
-        fileInline: req.payload.fileInline,
-        language: req.payload.language,
-        dependencies: req.payload.dependencies,
-        provider: req.quote.quote?.provider || req.quote.provider,
-        meta: req.payload.meta,
-      },
-      {
-        timeout: 30000, // 30 second timeout
+        timeout: 60000, // 60 second timeout for execution
         headers: {
           "Content-Type": "application/json",
         },

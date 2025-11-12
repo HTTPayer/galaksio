@@ -1,4 +1,4 @@
-export type TaskType = "compute" | "storage" | "cache";
+export type TaskType = "compute" | "storage" | "cache" | "store" | "run";
 
 /**
  * Task represents the executor request from the broker

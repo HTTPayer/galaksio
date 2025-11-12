@@ -3,6 +3,8 @@ import dotenv from "dotenv";
 import { Task, ExecutorResponse } from "./types.js";
 import { createHTTPayerClient } from "./client/httpayer.js";
 import { handleXCacheOperation } from "./handlers/xcache.js";
+import { handleOpenX402Operation } from "./handlers/openx402.js";
+import { handleMeritSystemsOperation } from "./handlers/meritSystems.js";
 
 dotenv.config();
 
@@ -17,6 +19,7 @@ app.get("/health", (req, res) => {
   res.json({
     ok: true,
     service: "galaksio-executor",
+    version: "2.0.0",
     timestamp: new Date().toISOString(),
   });
 });
@@ -39,58 +42,36 @@ app.post("/execute", async (req, res) => {
     return res.status(400).json(errorResponse);
   }
 
-  // Extract cache parameters from meta if they exist there
-  if (task.taskType === "cache" && task.meta) {
-    task.cacheOperation = task.cacheOperation || task.meta.cacheOperation;
-    task.cacheId = task.cacheId || task.meta.cacheId;
-    task.cacheKey = task.cacheKey || task.meta.cacheKey;
-    task.cacheValue = task.cacheValue || task.meta.cacheValue;
-    task.cacheTtl = task.cacheTtl || task.meta.cacheTtl;
-    task.cacheRegion = task.cacheRegion || task.meta.cacheRegion;
-  }
-
   try {
     let result: ExecutorResponse;
 
-    // Route based on task type and provider
+    // Route based on task type
     switch (task.taskType) {
-      case "cache":
+      case "store":
+        // Storage operations (xcache or openx402)
         if (task.provider === "xcache") {
           result = await handleXCacheOperation(task, httpayerClient);
+        } else if (task.provider === "openx402") {
+          result = await handleOpenX402Operation(task, httpayerClient);
         } else {
-          result = {
-            jobId: task.jobId,
-            status: "failed",
-            error: `Unsupported cache provider: ${task.provider}`,
-          };
+          throw new Error(`Unsupported storage provider: ${task.provider}`);
         }
         break;
 
-      case "storage":
-        result = {
-          jobId: task.jobId,
-          status: "failed",
-          error: "Storage tasks not yet implemented in TypeScript executor",
-        };
-        break;
-
-      case "compute":
-        result = {
-          jobId: task.jobId,
-          status: "failed",
-          error: "Compute tasks not yet implemented in TypeScript executor",
-        };
+      case "run":
+        // Compute operations (merit-systems only)
+        if (task.provider === "merit-systems") {
+          result = await handleMeritSystemsOperation(task, httpayerClient);
+        } else {
+          throw new Error(`Unsupported compute provider: ${task.provider}`);
+        }
         break;
 
       default:
-        result = {
-          jobId: task.jobId,
-          status: "failed",
-          error: `Unsupported task type: ${task.taskType}`,
-        };
+        throw new Error(`Unsupported task type: ${task.taskType}`);
     }
 
-    // Return response based on status
+    // Return response
     if (result.status === "failed") {
       console.error(`[executor] Task ${task.jobId} failed:`, result.error);
       return res.status(500).json(result);
@@ -125,9 +106,10 @@ app.use(
 // Start server
 const PORT = process.env.PORT || 8082;
 app.listen(PORT, () => {
-  console.log(`[INFO] Galaksio Executor (TypeScript) running on port ${PORT}`);
+  console.log(`[INFO] Galaksio Executor v2.0 running on port ${PORT}`);
   console.log(
     `[INFO] HTTPayer Router URL: ${process.env.HTTPAYER_ROUTER_URL || "http://localhost:3000"}`
   );
-  console.log(`[INFO] Supported providers: xcache`);
+  console.log(`[INFO] Supported providers: xcache, openx402, merit-systems`);
+  console.log(`[INFO] Task types: store, run`);
 });

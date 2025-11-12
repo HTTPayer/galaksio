@@ -14,7 +14,7 @@ import json
 from galaksio.akash import get_akash_pricing
 from galaksio.arweave import get_arweave_pricing
 from galaksio.pinata import get_pinata_storage_quote
-from galaksio.x_cache import get_xcache_pricing, get_xcache_operation_pricing
+from galaksio.x_cache import get_xcache_create_quote
 
 
 @dataclass
@@ -262,13 +262,14 @@ class QuoteEngine:
         return quotes
 
     def _get_xcache_cache(self, spec: CacheSpec) -> Optional[Quote]:
-        """Fetch xcache pricing via 402 response"""
-        result = get_xcache_pricing(
-            operation=spec.operation,
-            size_mb=spec.size_mb
-        )
+        """Fetch xcache pricing via 402 response for cache creation"""
+        # Only support 'create' operation through Galaksio
+        if spec.operation != "create":
+            return None
 
-        if not result:
+        result = get_xcache_create_quote(region="us-east-1")
+
+        if not result or "error" in result:
             return None
 
         return Quote(
@@ -276,16 +277,14 @@ class QuoteEngine:
             category="cache",
             price_usd=result.get("price_usd", 0),
             currency=result.get("currency", "USDC"),
-            billing_period="pay-per-request",
+            billing_period="one-time",
             metadata={
-                "spec": {
-                    "size_mb": spec.size_mb,
-                    "operation": spec.operation,
-                    "ttl_hours": spec.ttl_hours
-                },
+                "operation": "create",
+                "region": result.get("region", "us-east-1"),
+                "operations_included": result.get("operations_included", 50000),
                 "network": result.get("network"),
                 "recipient": result.get("recipient"),
-                "billing_type": result.get("billing_type"),
+                "x402_instructions": result.get("x402_instructions"),
                 "raw_response": result.get("metadata", {})
             }
         )

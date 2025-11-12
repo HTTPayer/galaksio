@@ -1,63 +1,37 @@
 import { HTTPayerClient } from "../client/httpayer.js";
 import { Task, ExecutorResponse } from "../types.js";
 
-const XCACHE_BASE_URL = "https://api.xcache.io";
+const XCACHE_BASE_URL = process.env.XCACHE_BASE_URL || "https://api.xcache.io";
 
 /**
- * Handle xcache operations (cache provider)
- * Supports: create, get, set, delete, list, ttl, update-ttl, topup
+ * Handle xcache storage operations
+ * Simplified to focus on: create cache, set data, get data
  */
 export async function handleXCacheOperation(
   task: Task,
   httpayer: HTTPayerClient
 ): Promise<ExecutorResponse> {
-  const { jobId, cacheOperation, cacheId, cacheKey, cacheValue, cacheTtl, cacheRegion } = task;
+  const { jobId, meta } = task;
+  const operation = meta?.operation || "set";
 
   try {
-    console.log(`[xcache] Handling operation: ${cacheOperation} for job ${jobId}`);
+    console.log(`[xcache] Handling operation: ${operation} for job ${jobId}`);
 
-    switch (cacheOperation) {
+    switch (operation) {
       case "create":
-        return await createCache(jobId, httpayer, cacheRegion);
-
-      case "get":
-        if (!cacheId || !cacheKey) {
-          throw new Error("cacheId and cacheKey are required for get operation");
-        }
-        return await getKey(jobId, httpayer, cacheId, cacheKey);
+        // Create a new cache instance
+        return await createCache(jobId, httpayer, meta?.region);
 
       case "set":
-        if (!cacheId || !cacheKey) {
-          throw new Error("cacheId and cacheKey are required for set operation");
-        }
-        return await setKey(jobId, httpayer, cacheId, cacheKey, cacheValue, cacheTtl);
+        // Store data in cache
+        return await setData(jobId, httpayer, task);
 
-      case "delete":
-        if (!cacheId || !cacheKey) {
-          throw new Error("cacheId and cacheKey are required for delete operation");
-        }
-        return await deleteKey(jobId, httpayer, cacheId, cacheKey);
-
-      case "list":
-        if (!cacheId) {
-          throw new Error("cacheId is required for list operation");
-        }
-        return await listKeys(jobId, httpayer, cacheId);
-
-      case "ttl":
-        if (!cacheId || !cacheKey) {
-          throw new Error("cacheId and cacheKey are required for ttl operation");
-        }
-        return await getTTL(jobId, httpayer, cacheId, cacheKey);
-
-      case "update-ttl":
-        if (!cacheId || !cacheKey || cacheTtl === undefined) {
-          throw new Error("cacheId, cacheKey, and cacheTtl are required for update-ttl operation");
-        }
-        return await updateTTL(jobId, httpayer, cacheId, cacheKey, cacheTtl);
+      case "get":
+        // Retrieve data from cache
+        return await getData(jobId, httpayer, meta?.cacheId, meta?.key);
 
       default:
-        throw new Error(`Unsupported cache operation: ${cacheOperation}`);
+        throw new Error(`Unsupported xcache operation: ${operation}`);
     }
   } catch (error: any) {
     console.error(`[xcache] Operation failed:`, error.message);
@@ -93,42 +67,58 @@ async function createCache(
 }
 
 /**
- * Get a key from the cache
+ * Store data in cache
  */
-async function getKey(
+async function setData(
   jobId: string,
   httpayer: HTTPayerClient,
-  cacheId: string,
-  key: string
+  task: Task
 ): Promise<ExecutorResponse> {
+  const { meta, fileInline } = task;
+
+  // For storage operations, we need to create a cache first if cacheId not provided
+  let cacheId = meta?.cacheId;
+
+  if (!cacheId) {
+    // Create new cache
+    const createResp = await createCache(jobId, httpayer, meta?.region);
+    if (createResp.status === "failed") {
+      return createResp;
+    }
+    if (!createResp.result?.cacheId) {
+      return {
+        jobId,
+        status: "failed",
+        error: "Failed to create cache: no cacheId returned",
+      };
+    }
+    cacheId = createResp.result.cacheId;
+  }
+
+  // Generate key if not provided
+  const key = meta?.key || `file_${Date.now()}`;
+
+  // Decode data from fileInline
+  let value: any;
+  if (fileInline) {
+    try {
+      // Try to decode base64
+      const buffer = Buffer.from(fileInline, "base64");
+      value = buffer.toString("utf-8");
+    } catch {
+      // If not base64, use as-is
+      value = fileInline;
+    }
+  } else {
+    value = meta?.value || "";
+  }
+
   const url = `${XCACHE_BASE_URL}/${cacheId}/${key}`;
+  const payload: any = { value };
 
-  const response = await httpayer.get(url);
-
-  return {
-    jobId,
-    status: "completed",
-    result: {
-      key: response.data.key,
-      value: response.data.value,
-      ttl: response.data.ttl,
-    },
-  };
-}
-
-/**
- * Set a key in the cache with optional TTL
- */
-async function setKey(
-  jobId: string,
-  httpayer: HTTPayerClient,
-  cacheId: string,
-  key: string,
-  value: any,
-  ttl?: number
-): Promise<ExecutorResponse> {
-  const url = `${XCACHE_BASE_URL}/${cacheId}/${key}`;
-  const payload = ttl !== undefined ? { ...value, ttl } : value;
+  if (meta?.ttl) {
+    payload.ttl = meta.ttl;
+  }
 
   const response = await httpayer.put(url, payload);
 
@@ -136,7 +126,8 @@ async function setKey(
     jobId,
     status: "completed",
     result: {
-      key: response.data.key,
+      cacheId,
+      key: response.data.key || key,
       value: response.data.value,
       ttl: response.data.ttl,
     },
@@ -144,61 +135,19 @@ async function setKey(
 }
 
 /**
- * Delete a key from the cache
+ * Get data from cache
  */
-async function deleteKey(
+async function getData(
   jobId: string,
   httpayer: HTTPayerClient,
-  cacheId: string,
-  key: string
+  cacheId?: string,
+  key?: string
 ): Promise<ExecutorResponse> {
+  if (!cacheId || !key) {
+    throw new Error("cacheId and key are required for get operation");
+  }
+
   const url = `${XCACHE_BASE_URL}/${cacheId}/${key}`;
-
-  const response = await httpayer.delete(url);
-
-  return {
-    jobId,
-    status: "completed",
-    result: {
-      message: response.data.message,
-    },
-  };
-}
-
-/**
- * List all keys in the cache
- */
-async function listKeys(
-  jobId: string,
-  httpayer: HTTPayerClient,
-  cacheId: string
-): Promise<ExecutorResponse> {
-  const url = `${XCACHE_BASE_URL}/${cacheId}`;
-
-  const response = await httpayer.get(url);
-
-  return {
-    jobId,
-    status: "completed",
-    result: {
-      keys: response.data.keys,
-      count: response.data.count,
-      operations: response.data.operations,
-    },
-  };
-}
-
-/**
- * Get TTL for a key
- */
-async function getTTL(
-  jobId: string,
-  httpayer: HTTPayerClient,
-  cacheId: string,
-  key: string
-): Promise<ExecutorResponse> {
-  const url = `${XCACHE_BASE_URL}/${cacheId}/${key}/ttl`;
-
   const response = await httpayer.get(url);
 
   return {
@@ -206,31 +155,7 @@ async function getTTL(
     status: "completed",
     result: {
       key: response.data.key,
-      ttl: response.data.ttl,
-      unit: response.data.unit,
-    },
-  };
-}
-
-/**
- * Update TTL for a key
- */
-async function updateTTL(
-  jobId: string,
-  httpayer: HTTPayerClient,
-  cacheId: string,
-  key: string,
-  ttl: number
-): Promise<ExecutorResponse> {
-  const url = `${XCACHE_BASE_URL}/${cacheId}/${key}/ttl`;
-
-  const response = await httpayer.put(url, { ttl });
-
-  return {
-    jobId,
-    status: "completed",
-    result: {
-      key: response.data.key,
+      value: response.data.value,
       ttl: response.data.ttl,
     },
   };

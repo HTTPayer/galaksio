@@ -54,3 +54,48 @@ export interface ExecutorResponse {
   result?: any;
   error?: string;
 }
+
+// ==================== X402 Response Types ====================
+
+export interface FieldDef {
+  type?: string;
+  required?: boolean | string[];
+  description?: string;
+  enum?: string[];
+  properties?: Record<string, FieldDef>; // for nested objects
+}
+
+export interface Accepts {
+  scheme: "exact";
+  network: string;
+  maxAmountRequired: string;
+  resource: string;
+  description: string;
+  mimeType: string;
+  payTo: string;
+  maxTimeoutSeconds: number;
+  asset: string;
+
+  // Optionally, schema describing the input and output expectations for the paid endpoint.
+  outputSchema?: {
+    input: {
+      type: "http";
+      method: "GET" | "POST";
+      bodyType?: "json" | "form-data" | "multipart-form-data" | "text" | "binary";
+      queryParams?: Record<string, FieldDef>;
+      bodyFields?: Record<string, FieldDef>;
+      headerFields?: Record<string, FieldDef>;
+    };
+    output?: Record<string, any>;
+  };
+
+  // Optionally, additional custom data the provider wants to include.
+  extra?: Record<string, any>;
+}
+
+export interface X402Response {
+  x402Version: number;
+  error?: string;
+  accepts?: Array<Accepts>;
+  payer?: string;
+}

@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 
-type JobStatus = "queued" | "running" | "completed" | "failed" | "payment_required";
+type JobStatus = "queued" | "running" | "completed" | "failed" | "payment_required" | "awaiting_payment" | "instructions_provided";
 
 interface JobRecord {
   id: string;

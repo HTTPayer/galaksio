@@ -30,7 +30,7 @@ router.post("/a2a/message", parseA2A, async (req: express.Request & { a2a?: A2AE
       },
       meta: { jobId: job.id },
     };
-    return res.status(402).json(responseEnvelope);
+    return res.status(200).json(responseEnvelope);
   }
 
   return res.status(400).json({ error: "unsupported-a2a-type" });

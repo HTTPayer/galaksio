@@ -11,11 +11,14 @@ Exposes simplified endpoints for quote operations:
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 import uvicorn
 
 from galaksio.quote_engine import QuoteEngine, ComputeSpec, StorageSpec, CacheSpec
+from galaksio.openx402 import get_openx402_storage_quote
+from galaksio.x_cache import get_xcache_create_quote
+from galaksio.merit_systems import get_merit_systems_quote
 
 
 # ==================== Pydantic Models ====================
@@ -115,6 +118,55 @@ class OrchestrationRequest(BaseModel):
         }
 
 
+# ==================== V2 API Models ====================
+
+class StoreQuoteRequestV2(BaseModel):
+    """V2 API: Request for storage quotes"""
+    fileSize: int
+    permanent: bool = False
+    ttl: Optional[int] = 3600  # Default 1 hour TTL
+    fileName: Optional[str] = None  # For JSON detection
+    fileContent: Optional[str] = None  # For JSON validation
+
+
+class RunQuoteRequestV2(BaseModel):
+    """V2 API: Request for compute quotes"""
+    codeSize: int
+    language: str = "python"
+
+
+class CacheQuoteRequestV2(BaseModel):
+    """V2 API: Request for cache creation quotes"""
+    region: str = "us-east-1"
+
+class BestQuoteRequest(BaseModel):
+    """Request for the best quote among multiple providers"""
+    spec: dict
+
+class QuoteV2(BaseModel):
+    """V2 API: Quote response"""
+    provider: str
+    price_usd: float
+    currency: Optional[str] = None
+    network: Optional[str] = None
+    recipient: Optional[str] = None
+    x402_instructions: Optional[Any] = None
+    file_size_bytes: Optional[int] = None
+    file_size_mb: Optional[float] = None
+    code_size_bytes: Optional[int] = None
+    language: Optional[str] = None
+    ttl: Optional[int] = None
+    operation: Optional[str] = None
+    metadata: Optional[Any] = None
+
+
+class StoreQuotesResponseV2(BaseModel):
+    """V2 API: Storage quotes response"""
+    quotes: List[Dict[str, Any]]
+    best: Dict[str, Any]
+    count: int
+
+
 # ==================== FastAPI App ====================
 
 app = FastAPI(
@@ -190,14 +242,25 @@ async def root():
     """
     return {
         "service": "Galaksio Quote Engine",
-        "version": "1.0.0",
-        "description": "Simplified multi-cloud pricing API with intelligent job orchestration",
+        "version": "2.0.0",
+        "description": "Multi-cloud pricing API with intelligent job orchestration",
         "endpoints": {
             "health": "/health",
             "compute_quote": "/quote/compute",
             "storage_quote": "/quote/storage",
             "cache_quote": "/quote/cache",
             "orchestrated_quote": "/quote"
+        },
+        "v2_endpoints": {
+            "store": "/v2/quote/store",
+            "run": "/v2/quote/run",
+            "cache": "/v2/quote/cache",
+            "best": "/v2/quote/best"
+        },
+        "providers": {
+            "storage": ["openx402", "pinata"],
+            "compute": ["merit-systems"],
+            "cache": ["xcache"]
         }
     }
 
@@ -607,13 +670,136 @@ async def orchestrated_quote(request: OrchestrationRequest) -> Dict[str, Any]:
         )
 
 
+# ==================== V2 API Endpoints (for Broker) ====================
+
+@app.post("/v2/quote/store", tags=["V2 API"])
+async def get_store_quotes_v2(req: StoreQuoteRequestV2):
+    """
+    V2 API: Get storage quotes from xCache and openx402
+
+    This endpoint is used by the broker to get storage quotes.
+    Returns list of quotes sorted by price (cheapest first)
+    Automatically detects JSON files and uses the /pin/json endpoint (0.01 USDC)
+    """
+    quotes = []
+
+    # Only use openx402 for storage quotes (xCache is for cache creation, not storage)
+    # Pass fileName and fileContent for JSON detection
+    openx402_quote = get_openx402_storage_quote(
+        file_size_bytes=req.fileSize,
+        file_name=req.fileName,
+        file_content=req.fileContent
+    )
+    if "error" not in openx402_quote:
+        quotes.append(openx402_quote)
+
+    if not quotes:
+        raise HTTPException(status_code=503, detail="No storage providers available")
+
+    # Filter out failed quotes (404 or other errors)
+    # Only keep quotes with 402 status (payment required) or valid free quotes
+    valid_quotes = [
+        q for q in quotes
+        if q.get('metadata', {}).get('status_code') == 402
+        or (q.get('free') and q.get('metadata', {}).get('status_code') == 200)
+    ]
+
+    # If no valid quotes, return all quotes but mark as potentially invalid
+    if not valid_quotes:
+        valid_quotes = quotes
+
+    # Sort by price (lowest first)
+    valid_quotes.sort(key=lambda q: q.get('price_usd', float('inf')))
+
+    return {
+        "quotes": quotes,  # Return all quotes for transparency
+        "best": valid_quotes[0] if valid_quotes else None,
+        "count": len(quotes)
+    }
+
+
+@app.post("/v2/quote/run", tags=["V2 API"])
+async def get_run_quote_v2(req: RunQuoteRequestV2):
+    """
+    V2 API: Get compute quote from merit-systems
+
+    This endpoint is used by the broker to get compute quotes.
+    Returns quote with x402 payment instructions
+    """
+    quote = get_merit_systems_quote(req.codeSize, req.language)
+
+    if "error" in quote:
+        raise HTTPException(status_code=503, detail=quote["error"])
+
+    return quote
+
+
+@app.post("/v2/quote/cache", tags=["V2 API"])
+async def get_cache_quote_v2(req: CacheQuoteRequestV2):
+    """
+    V2 API: Get cache creation quote from xCache
+
+    This endpoint is used by the broker to get cache creation quotes.
+    Returns quote with x402 payment instructions for creating a new cache instance.
+    """
+    quote = get_xcache_create_quote(req.region)
+
+    if "error" in quote:
+        raise HTTPException(status_code=503, detail=quote["error"])
+
+    return quote
+
+
+@app.post("/v2/quote/best", tags=["V2 API"])
+async def get_best_quote_v2(spec: dict):
+    """
+    V2 API: Get best quote for any operation (orchestration endpoint)
+
+    This endpoint is used by the broker for orchestrated quote requests.
+    Accepts a generic spec and returns the best available quote
+    based on the operation type and requirements.
+    """
+    operation = spec.get("operation")
+
+    if operation == "store":
+        # Convert spec to StoreQuoteRequestV2 format
+        store_req = StoreQuoteRequestV2(
+            fileSize=spec.get("fileSize", spec.get("file_size", 0)),
+            permanent=spec.get("permanent", False),
+            ttl=spec.get("ttl", 3600)
+        )
+        result = await get_store_quotes_v2(store_req)
+        return result.get("best")
+
+    elif operation == "run":
+        # Convert spec to RunQuoteRequestV2 format
+        run_req = RunQuoteRequestV2(
+            codeSize=spec.get("codeSize", spec.get("code_size", 0)),
+            language=spec.get("language", "python")
+        )
+        return await get_run_quote_v2(run_req)
+
+    elif operation == "cache":
+        # Convert spec to CacheQuoteRequestV2 format
+        cache_req = CacheQuoteRequestV2(
+            region=spec.get("region", "us-east-1")
+        )
+        return await get_cache_quote_v2(cache_req)
+
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown operation type: {operation}. Supported: 'store', 'run', 'cache'"
+        )
+
+
 # ==================== Run Server ====================
 
 if __name__ == "__main__":
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
-        port=8000,
+        port=8081,
         reload=True,
         log_level="info"
     )

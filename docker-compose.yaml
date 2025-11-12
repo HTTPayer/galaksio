@@ -1,1 +1,77 @@
-fi
+version: '3.8'
+
+services:
+  # Galaksio Backend - All-in-One Service
+  galaksio-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: galaksio-backend
+    ports:
+      - "8080:8080"  # Broker
+      - "8081:8081"  # Quote
+    environment:
+      - NODE_ENV=production
+      - PYTHONUNBUFFERED=1
+    env_file:
+      - .env.production
+    restart: unless-stopped
+    networks:
+      - galaksio-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Separate service architecture (alternative to all-in-one)
+  # Uncomment the services below if you prefer running services separately
+
+  # broker:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.broker
+  #   container_name: galaksio-broker
+  #   ports:
+  #     - "8080:8080"
+  #   environment:
+  #     - NODE_ENV=production
+  #     - QUOTE_SERVICE_URL=http://quote:8081
+  #     - EXECUTOR_SERVICE_URL=http://executor:8082
+  #   depends_on:
+  #     - quote
+  #     - executor
+  #   restart: unless-stopped
+  #   networks:
+  #     - galaksio-network
+
+  # executor:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.executor
+  #   container_name: galaksio-executor
+  #   ports:
+  #     - "8082:8082"
+  #   environment:
+  #     - NODE_ENV=production
+  #   restart: unless-stopped
+  #   networks:
+  #     - galaksio-network
+
+  # quote:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.quote
+  #   container_name: galaksio-quote
+  #   ports:
+  #     - "8081:8081"
+  #   environment:
+  #     - PYTHONUNBUFFERED=1
+  #   restart: unless-stopped
+  #   networks:
+  #     - galaksio-network
+
+networks:
+  galaksio-network:
+    driver: bridge
