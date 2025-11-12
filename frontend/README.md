@@ -1,4 +1,5 @@
-# Galaksio UIThis is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Galaksio UI
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 
 
@@ -10,27 +11,25 @@ Next.js App Router blueprint for Galaksio - On-chain USDC → Instant cloud comp
 
 
 
-- **Next.js 15** (App Router)```bash
+- **Next.js 15** (App Router)
 
-- **TypeScript**npm run dev
+- **TypeScript**
 
-- **Tailwind CSS v4**# or
+- **Tailwind CSS v4**
 
-- **viem/wagmi** - Ethereum interactionsyarn dev
+- **viem/wagmi** - Ethereum interactions
 
-- **SIWE** - Sign-In with Ethereum# or
+- **SIWE** - Sign-In with Ethereum
 
-- **jose** - JWT handlingpnpm dev
+- **jose** - JWT handling
 
-- **zod** - Validation# or
+- **zod** - Validation
 
-- **zustand** - State managementbun dev
-
-```
+- **zustand** - State management
 
 ## Features
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://galaksio.cloud](http://galaksio.cloud) with your browser to see the result.
 
 - 🔐 MetaMask authentication via SIWE
 
@@ -71,9 +70,9 @@ Create a `.env.local` file:
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
 
 ```env
-NEXT_PUBLIC_CHAIN_ID=8453           # Base mainnet (or 84532 for Base Sepolia)
-NEXT_PUBLIC_RPC_URL=https://mainnet.base.org
-NEXT_PUBLIC_GLX_TOKEN=0x...        # GLX ERC20 address on selected chain
+NEXT_PUBLIC_CHAIN_ID=...          # Chain ID 
+NEXT_PUBLIC_RPC_URL=...
+NEXT_PUBLIC_GLX_TOKEN=...        # GLX mint address on selected chain
 SIWE_JWT_SECRET=...               # Strong secret for JWT signing
 NEXT_PUBLIC_HTTPAYER_RELAY=https://relay.httpayer.com
 NEXT_PUBLIC_GALAKSIO_API=https://api.galaksio.cloud
@@ -92,35 +91,6 @@ Open [http://localhost:3000](http://localhost:3000) with your browser.
 1. Connect MetaMask → Sign message
 2. Visit `/dashboard` to see GLX credits
 3. Click "Run Script" (stub) or "Create Agent" (stub)
-
-## Project Structure
-
-```
-galaksio/
-├── src/
-│   ├── app/
-│   │   ├── api/
-│   │   │   ├── siwe/          # SIWE authentication endpoints
-│   │   │   └── galaksio/      # Galaksio API stubs
-│   │   ├── dashboard/         # Protected dashboard
-│   │   ├── layout.tsx         # Root layout with Navbar/Footer
-│   │   └── page.tsx           # Landing page
-│   ├── components/
-│   │   ├── Navbar.tsx         # Navigation bar
-│   │   ├── product/           # Product modals
-│   │   ├── ui/                # UI components
-│   │   └── web3/              # Web3 components
-│   ├── hooks/
-│   │   └── useGLXBalance.ts   # GLX ERC-20 balance hook
-│   ├── lib/
-│   │   └── jwt.ts             # JWT utilities
-│   ├── utils/
-│   │   ├── cn.ts              # Class name utility
-│   │   └── httpayer.ts        # HTTPayer 402 flow handler
-│   └── middleware.ts          # Route protection
-├── .env.local                 # Environment variables (create this)
-└── package.json
-```
 
 ## Next Steps
 
@@ -161,6 +131,7 @@ Supported chains:
 - Base mainnet (8453)
 - Base Sepolia (84532)
 - Ethereum mainnet (1)
+- Solana Devnet
 - Custom chains via configuration
 
 ## License
