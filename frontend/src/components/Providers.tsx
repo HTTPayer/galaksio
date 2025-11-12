@@ -41,7 +41,7 @@ interface ProvidersProps {
 }
 
 const CDP_CONFIG = {
-  projectId: process.env.CDP_PROJECT_ID || "",
+  projectId: process.env.NEXT_PUBLIC_CDP_PROJECT_ID || "",
   solana: { createOnLogin: true },
   appName: process.env.NEXT_PUBLIC_APP_NAME || "Galaksio", // Keep existing line for context
 };
