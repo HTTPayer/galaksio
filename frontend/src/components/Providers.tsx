@@ -73,16 +73,17 @@ export default function Providers({ children }: ProvidersProps) {
   }
 
   return (
+    <CDPHooksProvider config={config as any}>
     <CDPReactProvider config={config as any} theme={theme}>
-      <CDPHooksProvider config={config as any}>
+      
         <EmbeddedWalletLoader />
 
         <Suspense fallback={null}>
           <AuthRedirect />
         </Suspense>
         {children}
-      </CDPHooksProvider>
-    </CDPReactProvider>
+        </CDPReactProvider>
+    </CDPHooksProvider>
   );
 }
 
