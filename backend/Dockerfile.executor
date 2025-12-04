@@ -2,7 +2,7 @@
 # Dockerfile for Executor Service Only
 # ===================================
 
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 WORKDIR /app/executor
 
 # Install build dependencies
@@ -11,8 +11,8 @@ RUN apk add --no-cache python3 make g++
 # Copy package files
 COPY executor/package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install dependencies (including dev dependencies for build)
+RUN npm ci
 
 # Copy TypeScript config and source
 COPY executor/tsconfig.json ./
@@ -24,13 +24,18 @@ RUN npm run build
 # ===================================
 # Runtime stage
 # ===================================
-FROM node:18-alpine AS runtime
+FROM node:20-alpine AS runtime
 WORKDIR /app/executor
+
+# Install wget for healthchecks
+RUN apk add --no-cache wget
+
+# Copy package files and install production dependencies only
+COPY executor/package*.json ./
+RUN npm ci --omit=dev
 
 # Copy built application
 COPY --from=builder /app/executor/dist ./dist
-COPY --from=builder /app/executor/node_modules ./node_modules
-COPY --from=builder /app/executor/package*.json ./
 
 # Set environment
 ENV NODE_ENV=production

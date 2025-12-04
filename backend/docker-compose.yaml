@@ -1,20 +1,44 @@
 version: '3.8'
 
 services:
-  # Galaksio Backend - All-in-One Service
-  galaksio-backend:
+  # Quote Engine Service
+  quote:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: galaksio-backend
+      dockerfile: Dockerfile.quote
+    container_name: galaksio-quote
     ports:
-      - "8080:8080"  # Broker
-      - "8081:8081"  # Quote
+      - "8081:8081"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    networks:
+      - galaksio-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "-O", "/dev/null", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Executor Service
+
+  # Broker Service
+  broker:
+    build:
+      context: .
+      dockerfile: Dockerfile.broker
+    container_name: galaksio-broker
+    ports:
+      - "8080:8080"
     environment:
       - NODE_ENV=production
-      - PYTHONUNBUFFERED=1
+      - QUOTE_ENGINE_URL=http://quote:8081
+      - EXECUTOR_URL=http://executor:8082
     env_file:
       - .env.production
+    depends_on:
+      - quote
     restart: unless-stopped
     networks:
       - galaksio-network
@@ -24,53 +48,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  # Optional: Separate service architecture (alternative to all-in-one)
-  # Uncomment the services below if you prefer running services separately
-
-  # broker:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.broker
-  #   container_name: galaksio-broker
-  #   ports:
-  #     - "8080:8080"
-  #   environment:
-  #     - NODE_ENV=production
-  #     - QUOTE_SERVICE_URL=http://quote:8081
-  #     - EXECUTOR_SERVICE_URL=http://executor:8082
-  #   depends_on:
-  #     - quote
-  #     - executor
-  #   restart: unless-stopped
-  #   networks:
-  #     - galaksio-network
-
-  # executor:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.executor
-  #   container_name: galaksio-executor
-  #   ports:
-  #     - "8082:8082"
-  #   environment:
-  #     - NODE_ENV=production
-  #   restart: unless-stopped
-  #   networks:
-  #     - galaksio-network
-
-  # quote:
-  #   build:
-  #     context: .
-  #     dockerfile: Dockerfile.quote
-  #   container_name: galaksio-quote
-  #   ports:
-  #     - "8081:8081"
-  #   environment:
-  #     - PYTHONUNBUFFERED=1
-  #   restart: unless-stopped
-  #   networks:
-  #     - galaksio-network
 
 networks:
   galaksio-network:

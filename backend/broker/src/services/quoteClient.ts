@@ -70,7 +70,9 @@ export async function getStoreQuotes(
 export async function getRunQuote(req: RunQuoteRequest): Promise<Quote> {
   try {
     console.log("[quote-client] Fetching run quote:", req);
-    const resp = await axios.post(`${BASE_URL}/v2/quote/run`, req, {
+    const url = `${BASE_URL}/v2/quote/run`;
+    console.log("[quote-client] Request URL:", url);
+    const resp = await axios.post(url, req, {
       timeout: 10000,
     });
     return resp.data;

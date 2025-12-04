@@ -25,6 +25,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
 FROM python:3.13-slim AS runtime
 WORKDIR /app/quote
 
+# Install wget for healthchecks
+RUN apt-get update && apt-get install -y --no-install-recommends wget && \
+    rm -rf /var/lib/apt/lists/*
+
 # Copy installed packages and application
 COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 COPY --from=builder /app/quote ./

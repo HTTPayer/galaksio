@@ -22,12 +22,12 @@ import { swaggerSpec } from "./swagger.js";
 dotenv.config();
 
 const app = express();
-app.use(bodyParser.json({ limit: "10mb" }));
 
 // ──────────────────────────────
 // X402 Payment Middleware Setup
 // ──────────────────────────────
-// Static pricing for broker fee (separate from service provider pricing)
+// IMPORTANT: Payment middleware must come BEFORE body parsing
+// to avoid consuming the request body stream
 app.use(
   paymentMiddleware(
     config.brokerWallet as any, // receiver wallet
@@ -50,6 +50,9 @@ app.use(
     }
   )
 );
+
+// Body parser comes AFTER payment middleware
+app.use(bodyParser.json({ limit: "10mb" }));
 
 // ──────────────────────────────
 // API Documentation

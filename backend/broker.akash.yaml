@@ -1,0 +1,39 @@
+---
+version: "2.0"
+services:
+  galaksio-broker:
+    image: brandynham/galaksio-broker:v0.1.2-20251112183656
+    expose:
+      - port: 8080
+        as: 80
+        to:
+          - global: true
+    env:
+      - QUOTE_ENGINE_URL=http://bcv9rm7n2la2vass8b6juq3b4c.ingress.sa1.pl
+      - API_BASE_URL=http://cv25oc8hb9ad1d4k7uhgj2ij44.ingress.sa1.pl/
+      - BROKER_WALLET=0x066e4FBb1Cb2fd7dE4fb1432a7B1C1169B4c2C8F
+profiles:
+  compute:
+    galaksio-broker:
+      resources:
+        cpu:
+          units: 0.1
+        memory:
+          size: 512Mi
+        storage:
+          - size: 1Gi
+  placement:
+    dcloud:
+      pricing:
+        galaksio-broker:
+          denom: ibc/170C677610AC31DF0904FFE09CD3B5C657492170E7E52372E48756B71E56F2F1
+          amount: 100000
+      signedBy:
+        anyOf:
+          - akash1365yvmc4s7awdyj3n2sav7xfx76adc6dnmlx63
+        allOf: []
+deployment:
+  galaksio-broker:
+    dcloud:
+      profile: galaksio-broker
+      count: 1
