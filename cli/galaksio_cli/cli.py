@@ -524,7 +524,13 @@ async def _execute_run(client, code: str, language: str):
             "code": code,
             "language": language
         })
+
+        # Log the raw response for debugging
+        # print(f'Response status: {response.status_code}')
+        # print(f'Response headers: {dict(response.headers)}')
+
         result = response.json()
+        # print(f'Response body: {json.dumps(result, indent=2)}')
 
         # Check if we got payment instructions
         if result.get("status") == "instructions_provided":
@@ -565,14 +571,38 @@ async def _execute_run(client, code: str, language: str):
                 # print(f"base_url: {base_url}")
                 # print(f'resource_path: {resource_path}')
 
-                # Create x402 client with the base URL and make the request
+                # Create x402 client with the base URL and make the request with retry logic
                 async with x402HttpxClient(account=account, base_url=base_url) as resource_client:
-                    final_response = await resource_client.post(resource_path, json=payload)
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        final_response = await resource_client.post(resource_path, json=payload)
+
+                        # If not 402, we're done
+                        if final_response.status_code != 402:
+                            return final_response.json()
+
+                        # If this was the last attempt, return the 402 response
+                        if attempt == max_retries - 1:
+                            console.print(f"[red]Received 402 response after {max_retries} attempts[/red]")
+                            return final_response.json()
+
+                        # Log that we're retrying
+                        console.print(f"[yellow]Received 402 response, retrying... (attempt {attempt + 2}/{max_retries})[/yellow]")
+                        await asyncio.sleep(1)  # Wait before retrying
+
+                    # This shouldn't be reached, but just in case
                     return final_response.json()
 
         return result
     except Exception as e:
-        return {"error": str(e)}
+        import traceback
+        error_details = {
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "traceback": traceback.format_exc()
+        }
+        print(f'Exception in _execute_run: {json.dumps(error_details, indent=2)}')
+        return error_details
 
 
 async def _get_store_quote(client, file_size: int, permanent: bool, ttl: int):
