@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Providers from "@/components/Providers";
-import { Navbar, Footer } from "@/components/Navbar";
+import { AuthProvider } from "@/components/AuthProvider";
+import { Navbar } from "@/components/NavbarNew";
 
 export const metadata: Metadata = {
-  title: "Galaksio",
-  description: "On-chain USDC → Instant cloud compute & storage",
+  title: "Galaksio - Deploy with confidence",
+  description: "Build, deploy, and scale your applications with Galaksio. Import from GitHub and deploy instantly.",
 };
 
 export default function RootLayout({
@@ -19,13 +19,12 @@ export default function RootLayout({
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
       <body className="min-h-screen bg-white text-zinc-900 antialiased">
-        <Providers>
+        <AuthProvider>
           <div className="flex min-h-screen flex-col">
             <Navbar />
             <main className="flex-1">{children}</main>
-            <Footer />
           </div>
-        </Providers>
+        </AuthProvider>
       </body>
     </html>
   );
