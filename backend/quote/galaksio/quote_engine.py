@@ -14,6 +14,8 @@ import json
 from galaksio.akash import get_akash_pricing
 from galaksio.arweave import get_arweave_pricing
 from galaksio.pinata import get_pinata_storage_quote
+from galaksio.galaksio_storage import get_galaksio_storage_quote
+from galaksio.openx402 import get_openx402_storage_quote
 from galaksio.x_cache import get_xcache_create_quote
 
 
@@ -75,7 +77,7 @@ class QuoteEngine:
         self.cache_ttl = cache_ttl
         self._cache = {}
         self.compute_providers = ["akash", "aws", "gcp", "azure"]
-        self.storage_providers = ["arweave", "pinata", "filecoin"]
+        self.storage_providers = ["openx402", "galaksio_storage", "arweave", "pinata", "filecoin"]
         self.cache_providers = ["xcache", "redis", "memcached"]
         self.providers = self.compute_providers + self.storage_providers + self.cache_providers
     # ==================== COMPUTE QUOTES ====================
@@ -170,9 +172,19 @@ class QuoteEngine:
             List of Quote objects
         """
         if providers is None:
-            providers = ["arweave", "pinata", "filecoin"]
+            providers = ["openx402", "galaksio_storage", "arweave", "pinata", "filecoin"]
 
         quotes = []
+
+        if "openx402" in providers:
+            openx402_quote = self._get_openx402_storage(spec)
+            if openx402_quote:
+                quotes.append(openx402_quote)
+
+        if "galaksio_storage" in providers:
+            galaksio_quote = self._get_galaksio_storage(spec)
+            if galaksio_quote:
+                quotes.append(galaksio_quote)
 
         if "arweave" in providers and spec.permanent:
             arweave_quote = self._get_arweave_storage(spec)
@@ -187,6 +199,32 @@ class QuoteEngine:
         # TODO: Add Filecoin, Storj, etc.
 
         return quotes
+
+    def _get_openx402_storage(self, spec: StorageSpec) -> Optional[Quote]:
+        """Fetch OpenX402 IPFS storage pricing"""
+        size_bytes = int(spec.size_gb * 1_000_000_000)
+        result = get_openx402_storage_quote(file_size_bytes=size_bytes)
+
+        # If file is too large or error, return None
+        if not result or "error" in result:
+            return None
+
+        return Quote(
+            provider="openx402",
+            category="storage",
+            price_usd=result.get("price_usd", 0.01),
+            currency=result.get("currency", "USDC"),
+            billing_period="one-time",
+            metadata={
+                "spec": {"size_gb": spec.size_gb},
+                "network": result.get("network"),
+                "recipient": result.get("recipient"),
+                "platform": "ipfs",
+                "permanent": True,
+                "max_size_mb": result.get("max_size_mb", 100),
+                "workflow": result.get("workflow")
+            }
+        )
 
     def _get_arweave_storage(self, spec: StorageSpec) -> Optional[Quote]:
         """Fetch Arweave permanent storage pricing"""
@@ -227,6 +265,32 @@ class QuoteEngine:
                 "spec": {"size_gb": spec.size_gb},
                 "network": result.get("network"),
                 "recipient": result.get("recipient")
+            }
+        )
+
+    def _get_galaksio_storage(self, spec: StorageSpec) -> Optional[Quote]:
+        """Fetch Galaksio Storage x402 pricing with dynamic Arweave costs"""
+        size_bytes = int(spec.size_gb * 1_000_000_000)
+        result = get_galaksio_storage_quote(data_size_bytes=size_bytes)
+
+        if not result or "error" in result:
+            return None
+
+        return Quote(
+            provider="galaksio_storage",
+            category="storage",
+            price_usd=result.get("price_usd", 0),
+            currency=result.get("currency", "USDC"),
+            billing_period="one-time",
+            metadata={
+                "spec": {"size_gb": spec.size_gb},
+                "network": result.get("network"),
+                "recipient": result.get("recipient"),
+                "permanent": True,
+                "platform": "arweave",
+                "dynamic_pricing": result.get("dynamic_pricing", False),
+                "price_breakdown": result.get("price_breakdown", {}),
+                "x402_instructions": result.get("x402_instructions")
             }
         )
 

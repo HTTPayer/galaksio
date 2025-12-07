@@ -17,6 +17,7 @@ import uvicorn
 
 from galaksio.quote_engine import QuoteEngine, ComputeSpec, StorageSpec, CacheSpec
 from galaksio.openx402 import get_openx402_storage_quote
+from galaksio.galaksio_storage import get_galaksio_storage_quote
 from galaksio.x_cache import get_xcache_create_quote
 from galaksio.merit_systems import get_merit_systems_quote
 
@@ -125,8 +126,9 @@ class StoreQuoteRequestV2(BaseModel):
     fileSize: int
     permanent: bool = False
     ttl: Optional[int] = 3600  # Default 1 hour TTL
-    fileName: Optional[str] = None  # For JSON detection
-    fileContent: Optional[str] = None  # For JSON validation
+    fileName: Optional[str] = None
+    fileContent: Optional[str] = None
+    provider: Optional[str] = None  # Optional specific provider
 
 
 class RunQuoteRequestV2(BaseModel):
@@ -246,21 +248,21 @@ async def root():
         "description": "Multi-cloud pricing API with intelligent job orchestration",
         "endpoints": {
             "health": "/health",
-            "compute_quote": "/quote/compute",
-            "storage_quote": "/quote/storage",
-            "cache_quote": "/quote/cache",
-            "orchestrated_quote": "/quote"
-        },
-        "v2_endpoints": {
-            "store": "/v2/quote/store",
-            "run": "/v2/quote/run",
-            "cache": "/v2/quote/cache",
-            "best": "/v2/quote/best"
+            "store": "/quote/store",
+            "run": "/quote/run",
+            "cache": "/quote/cache",
+            "best": "/quote/best"
         },
         "providers": {
-            "storage": ["openx402", "pinata"],
+            "storage": ["openx402", "galaksio_storage"],
             "compute": ["merit-systems"],
             "cache": ["xcache"]
+        },
+        "documentation": {
+            "openx402": "https://ipfs.openx402.ai - IPFS storage, max 100MB, 0.01 USDC per file",
+            "galaksio_storage": "https://storage.galaksio.cloud - Arweave permanent storage, dynamic pricing",
+            "merit_systems": "E2B code execution service",
+            "xcache": "Redis cache creation service, 50K ops included"
         }
     }
 
@@ -291,420 +293,58 @@ async def list_providers():
         "cache_providers": cache_providers
     }
 
-@app.post("/quote/compute", tags=["Quotes"])
-async def compute_quote(request: ComputeQuoteRequest) -> Dict[str, Any]:
-    """
-    Get compute pricing quotes
-
-    Optionally specify a provider, otherwise queries all available compute providers.
-
-    Parameters:
-    - **provider**: Optional specific provider (e.g., "akash", "aws", "gcp", "azure")
-    - **cpu_cores**: Number of CPU cores required
-    - **memory_gb**: Memory in gigabytes
-    - **storage_gb**: Storage in gigabytes
-    - **gpu**: Optional GPU type
-    """
-    try:
-        spec = ComputeSpec(
-            cpu_cores=request.cpu_cores,
-            memory_gb=request.memory_gb,
-            storage_gb=request.storage_gb,
-            gpu=request.gpu
-        )
-
-        providers = [request.provider] if request.provider else None
-
-        if providers:
-            # Get quotes for specific provider
-            quotes = quote_engine.get_compute_quotes(spec, providers=providers)
-
-            if not quotes:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"No quotes available for provider: {request.provider}"
-                )
-
-            return {
-                "job_type": "compute",
-                "provider": request.provider,
-                "quote": {
-                    "provider": quotes[0].provider,
-                    "category": quotes[0].category,
-                    "price_usd": quotes[0].price_usd,
-                    "currency": quotes[0].currency,
-                    "billing_period": quotes[0].billing_period,
-                    "timestamp": quotes[0].timestamp,
-                    "metadata": quotes[0].metadata
-                }
-            }
-        else:
-            # Compare across all providers
-            comparison = quote_engine.compare_compute(spec)
-
-            if "error" in comparison:
-                raise HTTPException(status_code=404, detail=comparison["error"])
-
-            return {
-                "job_type": "compute",
-                "spec": comparison["spec"],
-                "quotes": comparison["quotes"],
-                "best_offer": comparison["best_offer"],
-                "total_providers": comparison["total_providers"],
-                "timestamp": comparison["timestamp"]
-            }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching compute quotes: {str(e)}"
-        )
-
-
-@app.post("/quote/storage", tags=["Quotes"])
-async def storage_quote(request: StorageQuoteRequest) -> Dict[str, Any]:
-    """
-    Get storage pricing quotes
-
-    Optionally specify a provider, otherwise queries all available storage providers.
-
-    Parameters:
-    - **provider**: Optional specific provider (e.g., "arweave", "pinata", "filecoin")
-    - **size_gb**: Storage size in gigabytes
-    - **duration_days**: Duration for temporary storage (optional)
-    - **permanent**: Whether permanent storage is required
-    """
-    try:
-        spec = StorageSpec(
-            size_gb=request.size_gb,
-            duration_days=request.duration_days,
-            permanent=request.permanent
-        )
-
-        providers = [request.provider] if request.provider else None
-
-        if providers:
-            # Get quotes for specific provider
-            quotes = quote_engine.get_storage_quotes(spec, providers=providers)
-
-            if not quotes:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"No quotes available for provider: {request.provider}"
-                )
-
-            return {
-                "job_type": "storage",
-                "provider": request.provider,
-                "quote": {
-                    "provider": quotes[0].provider,
-                    "category": quotes[0].category,
-                    "price_usd": quotes[0].price_usd,
-                    "currency": quotes[0].currency,
-                    "billing_period": quotes[0].billing_period,
-                    "timestamp": quotes[0].timestamp,
-                    "metadata": quotes[0].metadata
-                }
-            }
-        else:
-            # Compare across all providers
-            comparison = quote_engine.compare_storage(spec)
-
-            if "error" in comparison:
-                raise HTTPException(status_code=404, detail=comparison["error"])
-
-            return {
-                "job_type": "storage",
-                "spec": comparison["spec"],
-                "quotes": comparison["quotes"],
-                "best_offer": comparison["best_offer"],
-                "total_providers": comparison["total_providers"],
-                "timestamp": comparison["timestamp"]
-            }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching storage quotes: {str(e)}"
-        )
-
-
-@app.post("/quote/cache", tags=["Quotes"])
-async def cache_quote(request: CacheQuoteRequest) -> Dict[str, Any]:
-    """
-    Get cache pricing quotes
-
-    Queries cache providers (like xcache) to get pricing via 402 payment responses.
-
-    Parameters:
-    - **provider**: Optional specific provider (e.g., "xcache")
-    - **size_mb**: Cache size in MB
-    - **operation**: Cache operation type (create, get, set, delete, list, ttl)
-    - **ttl_hours**: Time-to-live in hours
-    """
-    try:
-        spec = CacheSpec(
-            size_mb=request.size_mb,
-            operation=request.operation,
-            ttl_hours=request.ttl_hours
-        )
-
-        providers = [request.provider] if request.provider else None
-
-        if providers:
-            # Get quotes for specific provider
-            quotes = quote_engine.get_cache_quotes(spec, providers=providers)
-
-            if not quotes:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"No quotes available for provider: {request.provider}"
-                )
-
-            return {
-                "job_type": "cache",
-                "provider": request.provider,
-                "quote": {
-                    "provider": quotes[0].provider,
-                    "category": quotes[0].category,
-                    "price_usd": quotes[0].price_usd,
-                    "currency": quotes[0].currency,
-                    "billing_period": quotes[0].billing_period,
-                    "timestamp": quotes[0].timestamp,
-                    "metadata": quotes[0].metadata
-                }
-            }
-        else:
-            # Compare across all providers
-            comparison = quote_engine.compare_cache(spec)
-
-            if "error" in comparison:
-                raise HTTPException(status_code=404, detail=comparison["error"])
-
-            return {
-                "job_type": "cache",
-                "spec": comparison["spec"],
-                "quotes": comparison["quotes"],
-                "best_offer": comparison["best_offer"],
-                "total_providers": comparison["total_providers"],
-                "timestamp": comparison["timestamp"]
-            }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error fetching cache quotes: {str(e)}"
-        )
-
-
-@app.post("/quote", tags=["Quotes"])
-async def orchestrated_quote(request: OrchestrationRequest) -> Dict[str, Any]:
-    """
-    Intelligent quote orchestration
-
-    Infers the job type (compute, storage, cache, or hybrid) from the provided parameters
-    and automatically orchestrates the appropriate quote operations.
-
-    Parameters:
-    - **Compute params**: cpu_cores, memory_gb, storage_gb, gpu
-    - **Storage params**: size_gb, duration_days, permanent
-    - **Cache params**: size_mb, cache_operation, ttl_hours
-    - **provider**: Optional specific provider
-
-    Returns quotes based on detected requirements.
-    """
-    print("Orchestration request received:", request.dict())
-    try:
-        job_type = _infer_job_type(request)
-
-        if job_type == "unknown":
-            raise HTTPException(
-                status_code=400,
-                detail="Could not infer job type. Please provide compute, storage, or cache parameters."
-            )
-
-        providers = [request.provider] if request.provider else None
-        result = {
-            "job_type": job_type,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-
-        if job_type == "compute":
-            spec = ComputeSpec(
-                cpu_cores=request.cpu_cores or 1,
-                memory_gb=request.memory_gb or 1,
-                storage_gb=request.storage_gb or 1,
-                gpu=request.gpu
-            )
-
-            if providers:
-                quotes = quote_engine.get_compute_quotes(spec, providers=providers)
-                if not quotes:
-                    raise HTTPException(status_code=404, detail="No quotes available")
-                result["quote"] = {
-                    "provider": quotes[0].provider,
-                    "category": quotes[0].category,
-                    "price_usd": quotes[0].price_usd,
-                    "currency": quotes[0].currency,
-                    "billing_period": quotes[0].billing_period,
-                    "metadata": quotes[0].metadata
-                }
-            else:
-                comparison = quote_engine.compare_compute(spec)
-                if "error" in comparison:
-                    raise HTTPException(status_code=404, detail=comparison["error"])
-                result.update(comparison)
-
-        elif job_type == "storage":
-            spec = StorageSpec(
-                size_gb=request.size_gb or 1,
-                duration_days=request.duration_days,
-                permanent=request.permanent or False
-            )
-
-            if providers:
-                quotes = quote_engine.get_storage_quotes(spec, providers=providers)
-                if not quotes:
-                    raise HTTPException(status_code=404, detail="No quotes available")
-                result["quote"] = {
-                    "provider": quotes[0].provider,
-                    "category": quotes[0].category,
-                    "price_usd": quotes[0].price_usd,
-                    "currency": quotes[0].currency,
-                    "billing_period": quotes[0].billing_period,
-                    "metadata": quotes[0].metadata
-                }
-            else:
-                comparison = quote_engine.compare_storage(spec)
-                if "error" in comparison:
-                    raise HTTPException(status_code=404, detail=comparison["error"])
-                result.update(comparison)
-
-        elif job_type == "cache":
-            spec = CacheSpec(
-                size_mb=request.size_mb or 100,
-                operation=request.cache_operation or "create",
-                ttl_hours=request.ttl_hours
-            )
-
-            if providers:
-                quotes = quote_engine.get_cache_quotes(spec, providers=providers)
-                if not quotes:
-                    raise HTTPException(status_code=404, detail="No quotes available")
-                result["quote"] = {
-                    "provider": quotes[0].provider,
-                    "category": quotes[0].category,
-                    "price_usd": quotes[0].price_usd,
-                    "currency": quotes[0].currency,
-                    "billing_period": quotes[0].billing_period,
-                    "metadata": quotes[0].metadata
-                }
-            else:
-                comparison = quote_engine.compare_cache(spec)
-                if "error" in comparison:
-                    raise HTTPException(status_code=404, detail=comparison["error"])
-                result.update(comparison)
-
-        elif job_type == "hybrid":
-            compute_spec = ComputeSpec(
-                cpu_cores=request.cpu_cores or 1,
-                memory_gb=request.memory_gb or 1,
-                storage_gb=request.storage_gb or 1,
-                gpu=request.gpu
-            )
-
-            storage_spec = StorageSpec(
-                size_gb=request.size_gb or 1,
-                duration_days=request.duration_days,
-                permanent=request.permanent or False
-            )
-
-            compute_comparison = quote_engine.compare_compute(compute_spec)
-            storage_comparison = quote_engine.compare_storage(storage_spec)
-
-            result["compute"] = compute_comparison
-            result["storage"] = storage_comparison
-
-            # Check if cache is also requested
-            cache_spec = None
-            if request.size_mb or request.cache_operation:
-                cache_spec = CacheSpec(
-                    size_mb=request.size_mb or 100,
-                    operation=request.cache_operation or "create",
-                    ttl_hours=request.ttl_hours
-                )
-                cache_comparison = quote_engine.compare_cache(cache_spec)
-                result["cache"] = cache_comparison
-
-            # Find overall best offer
-            best_offer = quote_engine.get_best_offer(
-                compute_spec=compute_spec,
-                storage_spec=storage_spec,
-                cache_spec=cache_spec
-            )
-
-            if best_offer:
-                result["overall_best_offer"] = {
-                    "provider": best_offer.provider,
-                    "category": best_offer.category,
-                    "price_usd": best_offer.price_usd,
-                    "currency": best_offer.currency,
-                    "billing_period": best_offer.billing_period,
-                    "metadata": best_offer.metadata
-                }
-
-        return result
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error in orchestrated quote: {str(e)}"
-        )
-
-
 # ==================== V2 API Endpoints (for Broker) ====================
 
-@app.post("/v2/quote/store", tags=["V2 API"])
+@app.post("/quote/store")
 async def get_store_quotes_v2(req: StoreQuoteRequestV2):
     """
-    V2 API: Get storage quotes from xCache and openx402
+    V2 API: Get storage quotes from openx402 and galaksio_storage
 
     This endpoint is used by the broker to get storage quotes.
-    Returns list of quotes sorted by price (cheapest first)
-    Automatically detects JSON files and uses the /pin/json endpoint (0.01 USDC)
+    Returns list of quotes sorted by price (cheapest first).
+
+    Providers:
+    - openx402: IPFS storage (max 100MB, 0.01 USDC)
+    - galaksio_storage: Arweave permanent storage (dynamic pricing)
+
+    If fileSize > 100MB, openx402 will be automatically excluded.
     """
     quotes = []
 
-    # Only use openx402 for storage quotes (xCache is for cache creation, not storage)
-    # Pass fileName and fileContent for JSON detection
-    openx402_quote = get_openx402_storage_quote(
-        file_size_bytes=req.fileSize,
-        file_name=req.fileName,
-        file_content=req.fileContent
-    )
-    if "error" not in openx402_quote:
-        quotes.append(openx402_quote)
+    # Get quotes from both storage providers (or specific provider if requested)
+    if not req.provider or req.provider == "openx402":
+        openx402_quote = get_openx402_storage_quote(
+            file_size_bytes=req.fileSize,
+            file_name=req.fileName,
+            file_content=req.fileContent,
+            permanent=req.permanent,
+            ttl=req.ttl
+        )
+        # Only add if not error (e.g., file too large)
+        if "error" not in openx402_quote:
+            quotes.append(openx402_quote)
+
+    if not req.provider or req.provider == "galaksio_storage":
+        galaksio_quote = get_galaksio_storage_quote(
+            data_size_bytes=req.fileSize
+        )
+        if "error" not in galaksio_quote:
+            quotes.append(galaksio_quote)
 
     if not quotes:
-        raise HTTPException(status_code=503, detail="No storage providers available")
+        raise HTTPException(
+            status_code=503,
+            detail="No storage providers available for this file size"
+        )
 
-    # Filter out failed quotes (404 or other errors)
-    # Only keep quotes with 402 status (payment required) or valid free quotes
+    # Filter out failed quotes - keep quotes with 402 status (payment required)
     valid_quotes = [
         q for q in quotes
         if q.get('metadata', {}).get('status_code') == 402
-        or (q.get('free') and q.get('metadata', {}).get('status_code') == 200)
+        or q.get('price_usd') is not None
     ]
 
-    # If no valid quotes, return all quotes but mark as potentially invalid
+    # If no valid quotes, return all quotes for transparency
     if not valid_quotes:
         valid_quotes = quotes
 
@@ -714,11 +354,12 @@ async def get_store_quotes_v2(req: StoreQuoteRequestV2):
     return {
         "quotes": quotes,  # Return all quotes for transparency
         "best": valid_quotes[0] if valid_quotes else None,
-        "count": len(quotes)
+        "count": len(quotes),
+        "file_size_mb": round(req.fileSize / 1_000_000, 2)
     }
 
 
-@app.post("/v2/quote/run", tags=["V2 API"])
+@app.post("/quote/run")
 async def get_run_quote_v2(req: RunQuoteRequestV2):
     """
     V2 API: Get compute quote from merit-systems
@@ -734,7 +375,7 @@ async def get_run_quote_v2(req: RunQuoteRequestV2):
     return quote
 
 
-@app.post("/v2/quote/cache", tags=["V2 API"])
+@app.post("/quote/cache")
 async def get_cache_quote_v2(req: CacheQuoteRequestV2):
     """
     V2 API: Get cache creation quote from xCache
@@ -750,7 +391,7 @@ async def get_cache_quote_v2(req: CacheQuoteRequestV2):
     return quote
 
 
-@app.post("/v2/quote/best", tags=["V2 API"])
+@app.post("/quote/best")
 async def get_best_quote_v2(spec: dict):
     """
     V2 API: Get best quote for any operation (orchestration endpoint)
