@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model UserAccount {
+  id         String    @id @default(uuid())
+  externalId String    @unique   // tu user.id o GitHub id
+  provider   String    @default("github")
+  createdAt  DateTime  @default(now())
+
+  jobs       UserJob[]
+}
+
+model UserJob {
+  id             String    @id @default(uuid())
+  userAccount    UserAccount @relation(fields: [userAccountId], references: [id], onDelete: Cascade)
+  userAccountId  String
+
+  kind           String    // 'run' | 'store' | 'cache'
+  brokerJobId    String
+  status         String
+
+  txId           String?   // para /store: result.cid
+  url            String?   // para /store: result.url o endpoints
+  provider       String?   // provider del broker
+  size           Int?      // bytes
+
+  stdout         String?   // compute
+  stderr         String?
+  exitCode       Int?
+  executionTimeMs Int?
+
+  rawResult      Json?     // response completa de /run o /store
+  rawStatus      Json?     // response de /job o /status
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userAccountId, kind, createdAt])
+  @@index([brokerJobId])
+}
