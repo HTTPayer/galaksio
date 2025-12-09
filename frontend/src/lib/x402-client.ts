@@ -15,6 +15,11 @@ export interface X402PaymentRequirements {
     description?: string;
     mimeType?: string;
     maxTimeoutSeconds?: number;
+    extra?: {
+      name?: string;
+      version?: string;
+      [key: string]: any;
+    };
   }>;
 }
 
@@ -159,9 +164,13 @@ async function signWithMetaMask(
     const validBefore = validAfter + 900; // Valid for 15 minutes
 
     // 3. Build EIP-712 message for TransferWithAuthorization
+    // Use token info from extra field if available
+    const tokenName = paymentOption.extra?.name || 'USD Coin';
+    const tokenVersion = paymentOption.extra?.version || '2';
+    
     const domain = {
-      name: 'USD Coin',
-      version: '2',
+      name: tokenName,
+      version: tokenVersion,
       chainId: targetChainId,
       verifyingContract: paymentOption.asset
     };
@@ -218,8 +227,8 @@ async function signWithMetaMask(
         // Add contract info for verification
         contract: paymentOption.asset,
         domain: {
-          name: 'USD Coin',
-          version: '2',
+          name: tokenName,
+          version: tokenVersion,
           chainId: targetChainId
         }
       }
