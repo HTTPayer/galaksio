@@ -1,303 +1,290 @@
-'use client';
+"use client";
 
-import { useSession } from 'next-auth/react';
-import { signIn } from 'next-auth/react';
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { 
-  Rocket, 
+import { useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
+import {
+  Activity,
   CheckCircle,
   XCircle,
-  Loader2,
   Clock,
-  ExternalLink,
-  GitBranch,
-  Activity
-} from 'lucide-react';
+  RefreshCw,
+  Loader2,
+  Eye,
+  Calendar,
+  Zap,
+  AlertCircle,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
-interface Deployment {
+interface JobRecord {
   id: string;
-  project_name: string;
-  status: 'building' | 'ready' | 'error';
-  url?: string;
-  created_at: string;
-  updated_at: string;
-  framework: string;
-  branch: string;
-  commit_sha: string;
-  commit_message: string;
+  brokerJobId: string;
+  kind: string;
+  status: string;
+  stdout: string | null;
+  stderr: string | null;
+  exitCode: number | null;
+  executionTimeMs: number | null;
+  txId: string | null;
+  url: string | null;
+  provider: string | null;
+  size: number | null;
+  createdAt: string;
+  updatedAt: string;
+  rawResult: Record<string, unknown> | null;
 }
 
 export default function DeploymentsPage() {
   const { data: session, status } = useSession();
-  const [deployments, setDeployments] = useState<Deployment[]>([]);
+  const router = useRouter();
+  const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      signIn('github');
+    if (status === "unauthenticated") {
+      signIn("github");
     }
   }, [status]);
 
-  const loadDeployments = async () => {
+  useEffect(() => {
+    if (session) {
+      loadJobs();
+    }
+  }, [session]);
+
+  const loadJobs = async () => {
     setLoading(true);
     try {
-      // TODO: Replace with actual API call
-      // const response = await fetch('/api/deployments');
-      // const data = await response.json();
-      // setDeployments(data);
-      
-      // Mock data
-      setTimeout(() => {
-        setDeployments([
-          {
-            id: '1',
-            project_name: 'my-awesome-app',
-            status: 'ready',
-            url: 'https://my-awesome-app.galaksio.app',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            framework: 'Next.js',
-            branch: 'main',
-            commit_sha: 'abc123',
-            commit_message: 'Initial deployment'
-          },
-          {
-            id: '2',
-            project_name: 'backend-api',
-            status: 'building',
-            created_at: new Date(Date.now() - 300000).toISOString(),
-            updated_at: new Date().toISOString(),
-            framework: 'Node.js',
-            branch: 'develop',
-            commit_sha: 'def456',
-            commit_message: 'Add new endpoints'
-          }
-        ]);
-        setLoading(false);
-      }, 1000);
+      const response = await fetch('/api/jobs');
+      if (!response.ok) throw new Error('Failed to load jobs');
+      const data = await response.json();
+      setJobs(data);
     } catch (error) {
-      console.error('Error loading deployments:', error);
+      console.error("Error loading jobs:", error);
+      toast.error("Failed to load deployments");
+    } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (session) {
-      loadDeployments();
+  const refreshAllJobs = async () => {
+    setRefreshing(true);
+    try {
+      await loadJobs();
+      toast.success("Jobs refreshed");
+    } catch (error) {
+      console.error("Error refreshing jobs:", error);
+      toast.error("Failed to refresh jobs");
+    } finally {
+      setRefreshing(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  };
 
-  if (status === 'loading') {
+  const getStatusIcon = (status: string) => {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return <CheckCircle className="h-5 w-5 text-green-600" />;
+      case 'failed':
+        return <XCircle className="h-5 w-5 text-red-600" />;
+      case 'running':
+      case 'executing':
+        return <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />;
+      case 'queued':
+      case 'awaiting_payment':
+        return <Clock className="h-5 w-5 text-yellow-600" />;
+      default:
+        return <AlertCircle className="h-5 w-5 text-gray-600" />;
+    }
+  };
+
+  const getStatusBadgeVariant = (status: string): "default" | "secondary" | "destructive" | "outline" => {
+    switch (status.toLowerCase()) {
+      case 'completed':
+        return 'default';
+      case 'failed':
+        return 'destructive';
+      case 'running':
+      case 'executing':
+        return 'default';
+      case 'queued':
+      case 'awaiting_payment':
+        return 'secondary';
+      default:
+        return 'outline';
+    }
+  };
+
+  // Calculate stats
+  const totalJobs = jobs.length;
+  const activeJobs = jobs.filter(j => 
+    ['running', 'executing', 'queued', 'awaiting_payment'].includes(j.status.toLowerCase())
+  ).length;
+  const completedJobs = jobs.filter(j => j.status.toLowerCase() === 'completed').length;
+  const failedJobs = jobs.filter(j => j.status.toLowerCase() === 'failed').length;
+
+  if (status === "loading" || loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-zinc-500" />
       </div>
     );
   }
 
-  if (!session) {
-    return null;
-  }
-
-  const statusConfig = {
-    ready: {
-      icon: CheckCircle,
-      color: 'text-green-400',
-      bg: 'bg-green-500/10',
-      border: 'border-green-500/20',
-      label: 'Ready',
-      animate: false
-    },
-    building: {
-      icon: Loader2,
-      color: 'text-blue-400',
-      bg: 'bg-blue-500/10',
-      border: 'border-blue-500/20',
-      label: 'Building',
-      animate: true
-    },
-    error: {
-      icon: XCircle,
-      color: 'text-red-400',
-      bg: 'bg-red-500/10',
-      border: 'border-red-500/20',
-      label: 'Error',
-      animate: false
-    }
-  };
-
   return (
-    <div className="min-h-screen bg-slate-950">
-      <div className="px-8 py-8">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-white">Deployments</h1>
-            <p className="mt-1 text-slate-400">
-              Monitor and manage your application deployments
-            </p>
-          </div>
-          <Link
-            href="/dashboard/compute/new"
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-          >
-            <Rocket className="h-4 w-4" />
-            New Deployment
-          </Link>
-        </div>
-
-        {/* Stats */}
-        <div className="grid gap-6 md:grid-cols-4 mb-8">
-          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
-            <div className="flex items-center gap-3">
-              <CheckCircle className="h-8 w-8 text-green-400" />
-              <div>
-                <p className="text-2xl font-bold text-white">
-                  {deployments.filter(d => d.status === 'ready').length}
-                </p>
-                <p className="text-sm text-slate-400">Active</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
-            <div className="flex items-center gap-3">
-              <Loader2 className="h-8 w-8 text-blue-400" />
-              <div>
-                <p className="text-2xl font-bold text-white">
-                  {deployments.filter(d => d.status === 'building').length}
-                </p>
-                <p className="text-sm text-slate-400">Building</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
-            <div className="flex items-center gap-3">
-              <XCircle className="h-8 w-8 text-red-400" />
-              <div>
-                <p className="text-2xl font-bold text-white">
-                  {deployments.filter(d => d.status === 'error').length}
-                </p>
-                <p className="text-sm text-slate-400">Failed</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
-            <div className="flex items-center gap-3">
-              <Activity className="h-8 w-8 text-purple-400" />
-              <div>
-                <p className="text-2xl font-bold text-white">
-                  {deployments.length}
-                </p>
-                <p className="text-sm text-slate-400">Total</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Deployments List */}
+    <div className="p-8 space-y-8 max-w-7xl mx-auto bg-white">
+      <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-bold text-white mb-4">Recent Deployments</h2>
-          
-          {loading ? (
-            <div className="space-y-4">
-              {[...Array(3)].map((_, i) => (
-                <div
-                  key={i}
-                  className="h-32 animate-pulse rounded-lg border border-slate-800 bg-slate-900/50"
-                />
-              ))}
-            </div>
-          ) : deployments.length === 0 ? (
-            <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-12 text-center">
-              <Rocket className="mx-auto h-12 w-12 text-slate-600" />
-              <h3 className="mt-4 text-lg font-semibold text-white">
-                No deployments yet
-              </h3>
-              <p className="mt-2 text-sm text-slate-400">
-                Start by importing a project from GitHub
+          <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Deployments Dashboard</h1>
+          <p className="text-zinc-600 mt-2">
+            Monitor and manage your code executions and storage deployments
+          </p>
+        </div>
+        <Button onClick={refreshAllJobs} variant="outline" size="sm" disabled={refreshing}>
+          {refreshing ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
+          Refresh All
+        </Button>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-zinc-200 hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-zinc-600">Total Jobs</CardTitle>
+            <Activity className="h-4 w-4 text-zinc-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-zinc-900">{totalJobs}</div>
+            <p className="text-xs text-zinc-500 mt-1">All deployments</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-blue-200 bg-blue-50 hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-blue-900">Active</CardTitle>
+            <Zap className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-blue-900">{activeJobs}</div>
+            <p className="text-xs text-blue-700 mt-1">Running or queued</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-green-200 bg-green-50 hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-green-900">Completed</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-green-900">{completedJobs}</div>
+            <p className="text-xs text-green-700 mt-1">Successfully executed</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-red-200 bg-red-50 hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-red-900">Failed</CardTitle>
+            <XCircle className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-red-900">{failedJobs}</div>
+            <p className="text-xs text-red-700 mt-1">Execution errors</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Jobs List */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Deployments</CardTitle>
+          <CardDescription>
+            Your latest code executions and storage deployments
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="p-6">
+          {jobs.length === 0 ? (
+            <div className="text-center py-12">
+              <Activity className="h-12 w-12 text-zinc-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-zinc-900 mb-2">No deployments yet</h3>
+              <p className="text-zinc-500 mb-4">
+                Start by executing code or uploading files
               </p>
-              <Link
-                href="/dashboard/compute/new"
-                className="mt-6 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-blue-700"
-              >
-                <Rocket className="h-4 w-4" />
-                Import Project
-              </Link>
             </div>
           ) : (
             <div className="space-y-4">
-              {deployments.map((deployment) => {
-                const config = statusConfig[deployment.status];
-                const StatusIcon = config.icon;
-                
-                return (
-                  <div
-                    key={deployment.id}
-                    className="rounded-lg border border-slate-800 bg-slate-900/50 p-6 transition-all hover:border-slate-700"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3">
-                          <h3 className="text-lg font-semibold text-white">
-                            {deployment.project_name}
-                          </h3>
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-full border ${config.border} ${config.bg} px-3 py-1 text-xs font-medium ${config.color}`}
-                          >
-                            <StatusIcon 
-                              className={`h-3 w-3 ${config.animate ? 'animate-spin' : ''}`} 
-                            />
-                            {config.label}
-                          </span>
+              {jobs.map((job) => (
+                <Card key={job.id} className="border-zinc-200 hover:border-zinc-300 transition-colors">
+                  <CardContent className="p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start gap-4 flex-1">
+                        {getStatusIcon(job.status)}
+                        <div className="flex-1 min-w-0 space-y-3">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Badge variant={getStatusBadgeVariant(job.status)} className="font-medium">
+                              {job.status}
+                            </Badge>
+                            <Badge variant="outline" className="font-mono text-xs">
+                              {job.kind}
+                            </Badge>
+                            {job.exitCode !== null && job.exitCode !== undefined && (
+                              <Badge variant={job.exitCode === 0 ? "default" : "destructive"} className="text-xs">
+                                Exit: {job.exitCode}
+                              </Badge>
+                            )}
+                          </div>
+                          
+                          <div className="space-y-1">
+                            <p className="text-sm font-medium text-zinc-900">
+                              Job ID: <span className="font-mono text-zinc-600">{job.brokerJobId}</span>
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-4 text-xs text-zinc-500">
+                            <div className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {new Date(job.createdAt).toLocaleString()}
+                            </div>
+                            {job.provider && (
+                              <div className="flex items-center gap-1">
+                                <Zap className="h-3 w-3" />
+                                {job.provider}
+                              </div>
+                            )}
+                            {job.executionTimeMs && (
+                              <div className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {(job.executionTimeMs / 1000).toFixed(2)}s
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        
-                        <div className="mt-3 flex items-center gap-6 text-sm text-slate-400">
-                          <span className="flex items-center gap-1.5">
-                            <GitBranch className="h-3.5 w-3.5" />
-                            {deployment.branch}
-                          </span>
-                          <span className="flex items-center gap-1.5">
-                            <Clock className="h-3.5 w-3.5" />
-                            {new Date(deployment.updated_at).toLocaleString()}
-                          </span>
-                          <span>{deployment.framework}</span>
-                        </div>
-                        
-                        <p className="mt-2 text-sm text-slate-500">
-                          {deployment.commit_message}
-                        </p>
-                        
-                        {deployment.url && (
-                          <a
-                            href={deployment.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-3 inline-flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 transition-colors"
-                          >
-                            {deployment.url}
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
-                        )}
                       </div>
-                      
-                      <div className="flex items-center gap-2">
-                        <Link
-                          href={`/dashboard/deployments/${deployment.id}`}
-                          className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-800"
-                        >
-                          View Details
-                        </Link>
-                      </div>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push(`/dashboard/deployments/${job.id}`)}
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        View Details
+                      </Button>
                     </div>
-                  </div>
-                );
-              })}
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

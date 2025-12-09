@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
 import { Navbar } from "@/components/NavbarNew";
+import { Toaster } from "@/components/ui/sonner";
 
 export const metadata: Metadata = {
   title: "Galaksio - Deploy with confidence",
@@ -24,6 +25,7 @@ export default function RootLayout({
             <Navbar />
             <main className="flex-1">{children}</main>
           </div>
+          <Toaster />
         </AuthProvider>
       </body>
     </html>

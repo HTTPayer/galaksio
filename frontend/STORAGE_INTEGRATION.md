@@ -1,53 +1,68 @@
 # Galaksio Storage Integration
 
-Integration con el API de storage permanente de Galaksio, powered por Arweave y x402 payment protocol.
+Integration con el Broker API de Galaksio para storage descentralizado (IPFS y Arweave) con x402 payment protocol.
 
-## 🌐 API Base URL
+## 🌐 API Endpoint
 
 ```
-https://storage.galaksio.cloud
+POST /store
 ```
+
+Almacena archivos en storage descentralizado (IPFS o Arweave) con pago automático vía X402.
 
 ## 📋 Características Implementadas
 
-### 1. **Cliente de API** (`src/lib/storage-api.ts`)
+### 1. **Broker Client** (`src/lib/broker.ts`)
 
-Cliente TypeScript completo para interactuar con el API de Galaksio Storage:
+La función `broker.store()` maneja todo el flujo X402 automáticamente:
 
-- **Operaciones Gratuitas:**
-  - `health()` - Health check del API
-  - `getBalance()` - Balance AR de la wallet
-  - `getTransaction(txId)` - Información de transacción
-
-- **Operaciones Pagadas (x402):**
-  - `uploadData()` - Subir datos ($0.01 + costo Arweave)
-  - `uploadFile()` - Subir archivo ($0.01 + costo Arweave)
-  - `getData(txId)` - Descargar datos ($0.001 USDC)
-  - `query()` - Buscar transacciones ($0.005 USDC)
-
-### 2. **Hook Personalizado** (`src/hooks/useStorage.ts`)
-
-React hook que simplifica el uso del storage API:
-
-```tsx
-const {
-  uploadFile,
-  uploadData,
-  downloadData,
-  getTransactionInfo,
-  queryByOwner,
-  getBalance,
-  uploading,
-  downloading,
-  querying,
-  error,
-  isWalletConnected
-} = useStorage(walletAddress);
+```typescript
+const result = await broker.store({
+  data: fileOrString,          // File object o string
+  filename: 'example.txt',     // Nombre del archivo
+  options: {
+    permanent: true,           // true = Arweave, false = IPFS
+    ttl: 86400,               // TTL en segundos (solo para IPFS)
+    provider: 'spuro'         // Proveedor específico (opcional)
+  }
+});
 ```
 
-### 3. **UI de Storage** (`src/app/storage/page.tsx`)
+**Respuesta:**
+```typescript
+{
+  jobId: string;
+  status: string;
+  result: {
+    cid: string;        // Content ID (IPFS hash o Arweave TX)
+    url: string;        // URL del gateway
+    provider: string;   // Proveedor usado
+    size: number;       // Tamaño en bytes
+  }
+}
+```
 
-Página completa con:
+### 2. **UI de Storage** (`src/app/dashboard/storage/page.tsx`)
+
+Interfaz mejorada con:
+
+**Características del UI:**
+- ✅ Selector de tipo de storage (Permanente/Temporal)
+- ✅ Configuración de TTL para storage temporal
+- ✅ Selector de proveedor (Auto/Galaksio/Spuro/OpenX402)
+- ✅ Dual mode: Upload file o crear texto
+- ✅ Vista previa de tamaño estimado
+- ✅ Manejo automático de pagos X402
+- ✅ Resultados con CID y URL
+- ✅ Diseño responsivo (grid 2/3 + 1/3)
+- ✅ Colores consistentes con el sistema de diseño
+
+**Sistema de Diseño:**
+- Colores primarios: `bg-blue-950`, `hover:bg-blue-900`
+- Colores de texto: `text-zinc-900`, `text-zinc-600`
+- Success: `border-green-200 bg-green-50`
+- Warning: `border-yellow-200 bg-yellow-50`
+- Info: `border-blue-200 bg-blue-50`
 
 - ✅ Conexión de wallet
 - ✅ Drag & drop para subir archivos

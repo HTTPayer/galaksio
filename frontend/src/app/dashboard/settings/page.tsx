@@ -17,8 +17,8 @@ export default function SettingsPage() {
 
   if (status === 'loading') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+      <div className="flex items-center justify-center h-full bg-white">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-950" />
       </div>
     );
   }
@@ -28,22 +28,22 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="bg-white">
       <div className="px-8 py-8 max-w-4xl">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white">Settings</h1>
-          <p className="mt-1 text-slate-400">
+          <h1 className="text-3xl font-bold text-zinc-900">Settings</h1>
+          <p className="mt-1 text-zinc-600">
             Manage your account preferences and security
           </p>
         </div>
 
         <div className="space-y-6">
           {/* Profile Section */}
-          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
+          <div className="rounded-lg border border-zinc-200 bg-white p-6">
             <div className="flex items-center gap-3 mb-4">
-              <User className="h-5 w-5 text-blue-400" />
-              <h2 className="text-xl font-bold text-white">Profile</h2>
+              <User className="h-5 w-5 text-blue-950" />
+              <h2 className="text-xl font-bold text-zinc-900">Profile</h2>
             </div>
             
             <div className="flex items-center gap-4">
@@ -57,13 +57,13 @@ export default function SettingsPage() {
                 />
               )}
               <div>
-                <p className="text-lg font-medium text-white">
+                <p className="text-lg font-medium text-zinc-900">
                   {session.user?.name}
                 </p>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-zinc-600">
                   {session.user?.email}
                 </p>
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-zinc-500 mt-1">
                   Connected via GitHub
                 </p>
               </div>
@@ -71,41 +71,41 @@ export default function SettingsPage() {
           </div>
 
           {/* API Keys (Placeholder) */}
-          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
+          <div className="rounded-lg border border-zinc-200 bg-white p-6">
             <div className="flex items-center gap-3 mb-4">
-              <Key className="h-5 w-5 text-blue-400" />
-              <h2 className="text-xl font-bold text-white">API Keys</h2>
+              <Key className="h-5 w-5 text-blue-950" />
+              <h2 className="text-xl font-bold text-zinc-900">API Keys</h2>
             </div>
-            <p className="text-sm text-slate-400 mb-4">
+            <p className="text-sm text-zinc-600 mb-4">
               Manage API keys for programmatic access to Galaksio
             </p>
-            <button className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700">
+            <button className="rounded-lg bg-blue-950 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-900">
               Generate API Key
             </button>
           </div>
 
           {/* Notifications (Placeholder) */}
-          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
+          <div className="rounded-lg border border-zinc-200 bg-white p-6">
             <div className="flex items-center gap-3 mb-4">
-              <Bell className="h-5 w-5 text-blue-400" />
-              <h2 className="text-xl font-bold text-white">Notifications</h2>
+              <Bell className="h-5 w-5 text-blue-950" />
+              <h2 className="text-xl font-bold text-zinc-900">Notifications</h2>
             </div>
             <div className="space-y-3">
               <label className="flex items-center gap-3">
                 <input type="checkbox" defaultChecked className="rounded" />
-                <span className="text-sm text-slate-300">
+                <span className="text-sm text-zinc-700">
                   Deployment status updates
                 </span>
               </label>
               <label className="flex items-center gap-3">
                 <input type="checkbox" defaultChecked className="rounded" />
-                <span className="text-sm text-slate-300">
+                <span className="text-sm text-zinc-700">
                   Build failures
                 </span>
               </label>
               <label className="flex items-center gap-3">
                 <input type="checkbox" className="rounded" />
-                <span className="text-sm text-slate-300">
+                <span className="text-sm text-zinc-700">
                   Weekly reports
                 </span>
               </label>
@@ -113,15 +113,15 @@ export default function SettingsPage() {
           </div>
 
           {/* Security (Placeholder) */}
-          <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-6">
+          <div className="rounded-lg border border-zinc-200 bg-white p-6">
             <div className="flex items-center gap-3 mb-4">
-              <Shield className="h-5 w-5 text-blue-400" />
-              <h2 className="text-xl font-bold text-white">Security</h2>
+              <Shield className="h-5 w-5 text-blue-950" />
+              <h2 className="text-xl font-bold text-zinc-900">Security</h2>
             </div>
-            <p className="text-sm text-slate-400 mb-4">
+            <p className="text-sm text-zinc-600 mb-4">
               Your account is secured through GitHub OAuth
             </p>
-            <div className="space-y-2 text-sm text-slate-300">
+            <div className="space-y-2 text-sm text-zinc-700">
               <p>✓ Two-factor authentication enabled (via GitHub)</p>
               <p>✓ Secure session management</p>
               <p>✓ Encrypted data transfer</p>

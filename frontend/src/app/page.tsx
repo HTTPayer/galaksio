@@ -52,7 +52,7 @@ export default function HomePage() {
               <div className="mt-10 flex flex-wrap items-center gap-4">
                 {session ? (
                   <Link
-                    href="/new"
+                    href="/dashboard/compute/new"
                     className="rounded-lg bg-blue-950 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-all hover:bg-blue-900 hover:shadow-lg"
                   >
                     Deploy your first project

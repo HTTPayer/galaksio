@@ -1,29 +1,112 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
+import {
+  Play,
+  Loader2,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Cpu,
+  Code,
+  History,
+} from "lucide-react";
+import { broker } from "@/lib/broker";
+import type {
+  Language,
+  GPUType,
+} from "@/types/compute";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { toast } from "sonner";
+import GitHubImport from "@/components/GitHubImport";
+import { useWallet } from "@/contexts/WalletContext";
 
-interface GitHubRepo {
-  id: number;
-  name: string;
-  full_name: string;
-  description: string | null;
-  private: boolean;
-  html_url: string;
-  updated_at: string;
-  language: string | null;
-  default_branch: string;
+const LANGUAGE_OPTIONS: { value: Language; label: string }[] = [
+  { value: "python", label: "Python" },
+  { value: "javascript", label: "JavaScript" },
+];
+
+const GPU_OPTIONS: { value: GPUType; label: string }[] = [
+  { value: "l40s", label: "L40S (Default)" },
+  { value: "a100", label: "A100 (High Performance)" },
+];
+
+const pythonExample = `# Example Python code
+print("Hello from Galaksio Compute!")
+
+# Calculate factorial
+def factorial(n):
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+
+result = factorial(5)
+print(f"Factorial of 5 is: {result}")`;
+
+const jsExample = `// Example JavaScript code
+console.log("Hello from Galaksio Compute!");
+
+// Calculate factorial
+function factorial(n) {
+  if (n <= 1) return 1;
+  return n * factorial(n - 1);
 }
 
-export default function NewProjectPage() {
+const result = factorial(5);
+console.log(\`Factorial of 5 is: \${result}\`);`;
+
+const EXAMPLE_CODE: Partial<Record<Language, string>> = {
+  python: pythonExample,
+  javascript: jsExample,
+};
+
+interface JobRecord {
+  id: string;
+  brokerJobId: string;
+  status: string;
+  stdout: string | null;
+  stderr: string | null;
+  executionTimeMs: number | null;
+  createdAt: string;
+}
+
+export default function ComputePage() {
   const { data: session, status } = useSession();
-  const router = useRouter();
-  const [repos, setRepos] = useState<GitHubRepo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [importing, setImporting] = useState<number | null>(null);
+  const { walletAddress } = useWallet();
+  const [code, setCode] = useState<string>(EXAMPLE_CODE.python || '');
+  const [language, setLanguage] = useState<Language>("python");
+  const [gpuType, setGpuType] = useState<GPUType>("l40s");
+  const [timeout, setTimeout] = useState<number>(60);
+  const [onDemand, setOnDemand] = useState<boolean>(false);
+  
+  const [executing, setExecuting] = useState(false);
+  const [executionResult, setExecutionResult] = useState<{
+    jobId: string;
+    status: string;
+    result: {
+      stdout: string;
+      stderr: string;
+      exitCode: number;
+      executionTime: number;
+    };
+  } | null>(null);
+  
+  const [recentJobs, setRecentJobs] = useState<JobRecord[]>([]);
+  const [loadingJobs, setLoadingJobs] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -32,189 +115,346 @@ export default function NewProjectPage() {
   }, [status]);
 
   useEffect(() => {
-    if (session?.accessToken) {
-      fetchRepos();
+    if (session) {
+      loadRecentJobs();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
-  const fetchRepos = async () => {
+  const loadRecentJobs = async () => {
+    setLoadingJobs(true);
     try {
-      setLoading(true);
-      const response = await fetch("https://api.github.com/user/repos?sort=updated&per_page=100", {
-        headers: {
-          Authorization: `Bearer ${session?.accessToken}`,
-          Accept: "application/vnd.github.v3+json",
-        },
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setRepos(data);
-      }
+      const response = await fetch('/api/jobs?kind=run');
+      if (!response.ok) throw new Error('Failed to load jobs');
+      const jobs = await response.json();
+      setRecentJobs(jobs);
     } catch (error) {
-      console.error("Error fetching repos:", error);
+      console.error("Error loading jobs:", error);
+      toast.error("Failed to load recent jobs");
     } finally {
-      setLoading(false);
+      setLoadingJobs(false);
     }
   };
 
-  const handleImport = async (repo: GitHubRepo) => {
-    setImporting(repo.id);
-    
-    // TODO: Aquí conectarás con tu backend
-    // const response = await fetch("/api/projects/import", {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
-    //   body: JSON.stringify({
-    //     repoUrl: repo.html_url,
-    //     repoName: repo.name,
-    //     branch: repo.default_branch,
-    //   }),
-    // });
-
-    // Simulación por ahora
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    setImporting(null);
-    router.push("/dashboard");
+  const handleLanguageChange = (newLanguage: Language) => {
+    setLanguage(newLanguage);
+    setCode(EXAMPLE_CODE[newLanguage] || '// Enter your code here...');
   };
 
-  const filteredRepos = repos.filter(
-    (repo) =>
-      repo.name.toLowerCase().includes(search.toLowerCase()) ||
-      repo.description?.toLowerCase().includes(search.toLowerCase())
-  );
+  const handleGitHubImport = (importedCode: string, importedLanguage: Language, fileName: string) => {
+    setCode(importedCode);
+    setLanguage(importedLanguage);
+    toast.success(`Loaded ${fileName}`);
+  };
 
-  if (status === "loading" || status === "unauthenticated") {
+  const handleExecute = async () => {
+    if (!code.trim()) {
+      toast.error("Please enter some code to execute");
+      return;
+    }
+
+    if (!walletAddress) {
+      toast.error("Please connect your wallet first");
+      return;
+    }
+
+    setExecuting(true);
+    setExecutionResult(null);
+
+    try {
+      // Call broker helper - handles X402 payment flow automatically
+      const brokerResult = await broker.run({
+        code,
+        language,
+        gpu_type: gpuType,
+        gpu_count: 1,
+        timeout,
+        on_demand: onDemand,
+      });
+
+      setExecutionResult(brokerResult);
+
+      // Save to internal API
+      const saveResponse = await fetch('/api/jobs/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(brokerResult),
+      });
+
+      if (!saveResponse.ok) {
+        console.error('Failed to save job to database');
+      }
+      
+      if (brokerResult.result.stdout) {
+        toast.success("Code executed successfully!");
+      } else if (brokerResult.result.stderr) {
+        toast.error("Code execution completed with errors");
+      }
+      
+      // Reload recent jobs
+      loadRecentJobs();
+    } catch (error) {
+      console.error("Execution error:", error);
+      toast.error(error instanceof Error ? error.message : "Execution failed");
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  const getStateColor = (status: string): string => {
+    switch (status) {
+      case "completed": return "text-green-600";
+      case "failed": return "text-red-600";
+      case "running": return "text-blue-600";
+      case "pending": return "text-yellow-600";
+      default: return "text-zinc-600";
+    }
+  };
+
+  const getStateIcon = (status: string) => {
+    switch (status) {
+      case "completed": return <CheckCircle className="h-4 w-4" />;
+      case "failed": return <XCircle className="h-4 w-4" />;
+      case "running": return <Loader2 className="h-4 w-4 animate-spin" />;
+      case "pending": return <Clock className="h-4 w-4" />;
+      default: return <Clock className="h-4 w-4" />;
+    }
+  };
+
+  if (status === "loading") {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-zinc-200 border-t-zinc-900"></div>
+      <div className="flex min-h-screen items-center justify-center bg-white">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-950" />
       </div>
     );
   }
 
+  if (!session) {
+    return null;
+  }
+
   return (
-    <div className="min-h-screen bg-zinc-50 py-12">
-      <div className="mx-auto max-w-5xl px-6">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-zinc-900">Import Git Repository</h1>
+    <div className="bg-white p-8">
+      <div className="mx-auto max-w-7xl space-y-8">
+        <div>
+          <h1 className="text-3xl font-bold text-zinc-900">
+            Code Execution
+          </h1>
           <p className="mt-2 text-zinc-600">
-            Select a repository from your GitHub account to import and deploy.
+            Run your code on powerful cloud infrastructure
           </p>
         </div>
 
-        {/* Search */}
-        <div className="mb-6">
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Search repositories..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-lg border border-zinc-200 bg-white px-4 py-3 pl-11 text-sm outline-none transition-colors focus:border-zinc-400"
-            />
-            <svg
-              className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-6">
+            {/* GitHub Import */}
+            {session.accessToken && (
+              <GitHubImport
+                accessToken={session.accessToken}
+                onImport={handleGitHubImport}
               />
-            </svg>
-          </div>
-        </div>
-
-        {/* Repositories List */}
-        {loading ? (
-          <div className="space-y-4">
-            {[...Array(3)].map((_, i) => (
-              <div
-                key={i}
-                className="h-32 animate-pulse rounded-lg border border-zinc-200 bg-white"
-              ></div>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {filteredRepos.length === 0 ? (
-              <div className="rounded-lg border border-zinc-200 bg-white p-12 text-center">
-                <p className="text-zinc-600">No repositories found.</p>
-              </div>
-            ) : (
-              filteredRepos.map((repo) => (
-                <div
-                  key={repo.id}
-                  className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white p-6 transition-all hover:border-zinc-300 hover:shadow-md"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-semibold text-zinc-900">
-                        {repo.name}
-                      </h3>
-                      {repo.private && (
-                        <span className="rounded-full border border-zinc-200 px-2 py-0.5 text-xs text-zinc-600">
-                          Private
-                        </span>
-                      )}
-                      {repo.language && (
-                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-                          {repo.language}
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-2 text-sm text-zinc-600">
-                      {repo.description || "No description provided"}
-                    </p>
-                    <div className="mt-2 flex items-center gap-4 text-xs text-zinc-500">
-                      <span>
-                        Updated {new Date(repo.updated_at).toLocaleDateString()}
-                      </span>
-                      <span>•</span>
-                      <span>{repo.default_branch}</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleImport(repo)}
-                    disabled={importing !== null}
-                    className="ml-6 rounded-lg bg-black px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {importing === repo.id ? (
-                      <span className="flex items-center gap-2">
-                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                        Importing...
-                      </span>
-                    ) : (
-                      "Import"
-                    )}
-                  </button>
+            )}
+            
+            <Card>
+              <CardHeader>
+                <CardTitle>Code Editor</CardTitle>
+                <CardDescription>Write or paste your code below</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="language">Language</Label>
+                  <Select value={language} onValueChange={(value) => handleLanguageChange(value as Language)}>
+                    <SelectTrigger id="language">
+                      <SelectValue placeholder="Select language" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white border-zinc-200">
+                      {LANGUAGE_OPTIONS.map((lang) => (
+                        <SelectItem key={lang.value} value={lang.value}>
+                          <div className="flex items-center gap-2">
+                            <Code className="h-4 w-4" />
+                            {lang.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              ))
+
+                <div className="space-y-2">
+                  <Label htmlFor="code">Code</Label>
+                  <Textarea
+                    id="code"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    placeholder="Enter your code here..."
+                    rows={16}
+                    className="font-mono text-sm"
+                    disabled={executing}
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="gpu">GPU Type</Label>
+                    <Select value={gpuType} onValueChange={(value) => setGpuType(value as GPUType)} disabled={executing}>
+                      <SelectTrigger id="gpu">
+                        <SelectValue placeholder="Select GPU" />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border-zinc-200">
+                        {GPU_OPTIONS.map((gpu) => (
+                          <SelectItem key={gpu.value} value={gpu.value}>
+                            <div className="flex items-center gap-2">
+                              <Cpu className="h-4 w-4" />
+                              {gpu.label}
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="timeout">Timeout (seconds)</Label>
+                    <Input id="timeout" type="number" value={timeout} onChange={(e) => setTimeout(parseInt(e.target.value) || 60)} min={1} max={3600} disabled={executing} />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <Label htmlFor="on-demand">Execution Mode</Label>
+                  <div className="flex items-center gap-2">
+                    <input id="on-demand" type="checkbox" checked={onDemand} onChange={(e) => setOnDemand(e.target.checked)} disabled={executing} className="h-4 w-4" />
+                    <label htmlFor="on-demand" className="text-sm">On-Demand (faster, higher cost)</label>
+                  </div>
+                </div>
+
+                <Button 
+                  onClick={handleExecute} 
+                  disabled={executing || !code.trim() || !walletAddress} 
+                  className="w-full bg-blue-950 hover:bg-blue-900 text-stone-50"
+                >
+                  {executing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Executing...
+                    </>
+                  ) : (
+                    <>
+                      <Play className="mr-2 h-4 w-4" />
+                      Execute Code
+                    </>
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+
+            {executionResult && (
+              <Card className={executionResult.result.stderr ? "border-red-200 bg-red-50" : "border-green-200 bg-green-50"}>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {executionResult.result.stderr ? (
+                        <XCircle className="h-5 w-5 text-red-600" />
+                      ) : (
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                      )}
+                      <CardTitle className={executionResult.result.stderr ? "text-red-900" : "text-green-900"}>
+                        Execution Result
+                      </CardTitle>
+                    </div>
+                    {executionResult.result.executionTime && (
+                      <Badge variant="outline">{(executionResult.result.executionTime / 1000).toFixed(2)}s</Badge>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {executionResult.jobId && (
+                    <div className="mb-4">
+                      <Label className="text-sm font-medium">Job ID</Label>
+                      <code className="block mt-1 text-xs text-zinc-700 font-mono">
+                        {executionResult.jobId}
+                      </code>
+                    </div>
+                  )}
+                  
+                  <div className="space-y-2">
+                    {executionResult.result.stdout && (
+                      <div>
+                        <Label className="text-sm font-medium">Output (stdout)</Label>
+                        <pre className="mt-1 rounded bg-zinc-900 text-zinc-100 p-4 text-sm overflow-x-auto">
+                          {executionResult.result.stdout}
+                        </pre>
+                      </div>
+                    )}
+                    {executionResult.result.stderr && (
+                      <div>
+                        <Label className="text-sm font-medium">Error (stderr)</Label>
+                        <pre className="mt-1 rounded bg-zinc-900 text-red-400 p-4 text-sm overflow-x-auto">
+                          {executionResult.result.stderr}
+                        </pre>
+                      </div>
+                    )}
+                    {executionResult.result.exitCode !== undefined && (
+                      <div>
+                        <Label className="text-sm font-medium">Exit Code</Label>
+                        <Badge variant={executionResult.result.exitCode === 0 ? "outline" : "destructive"}>
+                          {executionResult.result.exitCode}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
-        )}
 
-        {/* Import from URL */}
-        <div className="mt-8 rounded-lg border border-zinc-200 bg-white p-6">
-          <h2 className="text-lg font-semibold text-zinc-900">
-            Or import from Git URL
-          </h2>
-          <p className="mt-1 text-sm text-zinc-600">
-            Import a Git repository from any provider
-          </p>
-          <div className="mt-4 flex gap-3">
-            <input
-              type="text"
-              placeholder="https://github.com/username/repo"
-              className="flex-1 rounded-lg border border-zinc-200 px-4 py-2 text-sm outline-none transition-colors focus:border-zinc-400"
-            />
-            <button className="rounded-lg bg-black px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800">
-              Import
-            </button>
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <History className="h-5 w-5" />
+                    <CardTitle>Recent Jobs</CardTitle>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={loadRecentJobs} disabled={loadingJobs}>
+                    {loadingJobs ? <Loader2 className="h-4 w-4 animate-spin" /> : "Refresh"}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingJobs ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                  </div>
+                ) : recentJobs.length === 0 ? (
+                  <p className="text-center py-8 text-zinc-500 text-sm">No recent jobs</p>
+                ) : (
+                  <div className="space-y-3">
+                    {recentJobs.slice(0, 10).map((job) => (
+                      <div key={job.id} className="rounded-lg border border-zinc-200 p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className={`flex items-center gap-2 ${getStateColor(job.status)}`}>
+                            {getStateIcon(job.status)}
+                            <span className="font-medium capitalize text-sm">{job.status}</span>
+                          </div>
+                          {job.executionTimeMs && (
+                            <Badge variant="outline" className="text-xs">
+                              {(job.executionTimeMs / 1000).toFixed(2)}s
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-xs space-y-1">
+                          <p className="text-zinc-600">
+                            ID: <code className="text-xs">{job.brokerJobId.substring(0, 16)}...</code>
+                          </p>
+                          <p className="text-zinc-500">
+                            {new Date(job.createdAt).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>

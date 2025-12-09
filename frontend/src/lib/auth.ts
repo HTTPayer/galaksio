@@ -33,3 +33,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     signIn: "/",
   },
 });
+
+/**
+ * Get the current authenticated user's external ID (GitHub ID)
+ * @throws {Error} If user is not authenticated
+ */
+export async function getCurrentUserExternalId(): Promise<string> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    throw new Error("Not authenticated");
+  }
+  return String(session.user.id);
+}

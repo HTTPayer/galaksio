@@ -25,7 +25,7 @@ export function Navbar() {
                 Dashboard
               </Link>
               <Link
-                href="/docs"
+                href="https://gentle-primula-666.notion.site/Deliverable-1-Prototype-Dec-1-11-59-PM-EST-2bb6597ad8d9809faa5fe916ceb6eb5c?source=copy_link"
                 className="text-sm text-zinc-600 transition-colors hover:text-zinc-900"
               >
                 Docs
