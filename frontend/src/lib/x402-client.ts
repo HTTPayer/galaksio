@@ -48,6 +48,60 @@ function getChainIdFromNetwork(network: string): number {
 }
 
 /**
+ * Get network configuration for wallet_addEthereumChain
+ */
+function getNetworkConfig(network: string, chainIdHex: string) {
+  const configs: Record<string, any> = {
+    'avalanche': {
+      chainId: chainIdHex,
+      chainName: 'Avalanche C-Chain',
+      nativeCurrency: {
+        name: 'AVAX',
+        symbol: 'AVAX',
+        decimals: 18
+      },
+      rpcUrls: ['https://api.avax.network/ext/bc/C/rpc'],
+      blockExplorerUrls: ['https://snowtrace.io/']
+    },
+    'base': {
+      chainId: chainIdHex,
+      chainName: 'Base',
+      nativeCurrency: {
+        name: 'Ethereum',
+        symbol: 'ETH',
+        decimals: 18
+      },
+      rpcUrls: ['https://mainnet.base.org'],
+      blockExplorerUrls: ['https://basescan.org/']
+    },
+    'ethereum': {
+      chainId: chainIdHex,
+      chainName: 'Ethereum Mainnet',
+      nativeCurrency: {
+        name: 'Ethereum',
+        symbol: 'ETH',
+        decimals: 18
+      },
+      rpcUrls: ['https://eth.llamarpc.com'],
+      blockExplorerUrls: ['https://etherscan.io/']
+    },
+    'polygon': {
+      chainId: chainIdHex,
+      chainName: 'Polygon Mainnet',
+      nativeCurrency: {
+        name: 'MATIC',
+        symbol: 'MATIC',
+        decimals: 18
+      },
+      rpcUrls: ['https://polygon-rpc.com'],
+      blockExplorerUrls: ['https://polygonscan.com/']
+    }
+  };
+  
+  return configs[network.toLowerCase()] || configs['avalanche'];
+}
+
+/**
  * Sign payment with MetaMask using EIP-3009 TransferWithAuthorization
  * Uses the already connected wallet from WalletConnect component
  */
@@ -62,16 +116,16 @@ async function signWithMetaMask(
   const ethereum = window.ethereum;
 
   try {
-    // Force Avalanche C-Chain (43114)
-    const targetChainId = 43114;
+    // Get chainId from payment option network
+    const targetChainId = getChainIdFromNetwork(paymentOption.network);
     const targetChainIdHex = '0x' + targetChainId.toString(16);
 
     // Check current network
     const currentChainId = await ethereum.request({ method: 'eth_chainId' });
     
-    // Switch to Avalanche C-Chain if not already on it
+    // Switch to required network if not already on it
     if (currentChainId !== targetChainIdHex) {
-      console.log(`[X402] Current network: ${currentChainId}, switching to Avalanche C-Chain (${targetChainIdHex})...`);
+      console.log(`[X402] Current network: ${currentChainId}, switching to ${paymentOption.network} (${targetChainIdHex})...`);
       
       try {
         await ethereum.request({
@@ -82,20 +136,12 @@ async function signWithMetaMask(
         // If chain not added (error 4902), add it
         const err = switchError as { code?: number };
         if (err.code === 4902) {
-          console.log('[X402] Adding Avalanche C-Chain to wallet...');
+          console.log(`[X402] Adding ${paymentOption.network} to wallet...`);
+          // Get network config
+          const networkConfig = getNetworkConfig(paymentOption.network, targetChainIdHex);
           await ethereum.request({
             method: 'wallet_addEthereumChain',
-            params: [{
-              chainId: targetChainIdHex,
-              chainName: 'Avalanche C-Chain',
-              nativeCurrency: {
-                name: 'AVAX',
-                symbol: 'AVAX',
-                decimals: 18
-              },
-              rpcUrls: ['https://api.avax.network/ext/bc/C/rpc'],
-              blockExplorerUrls: ['https://snowtrace.io/']
-            }],
+            params: [networkConfig],
           });
         } else {
           throw switchError;
@@ -116,7 +162,7 @@ async function signWithMetaMask(
     const domain = {
       name: 'USD Coin',
       version: '2',
-      chainId: targetChainId, // Use Avalanche C-Chain
+      chainId: targetChainId,
       verifyingContract: paymentOption.asset
     };
 
@@ -154,11 +200,11 @@ async function signWithMetaMask(
       ]
     });
 
-    // 5. Build x402 payment header (force 'avalanche' network)
+    // 5. Build x402 payment header
     const paymentData = {
       x402Version: 1,
-      Scheme: 'exact',
-      network: 'avalanche', // Force Avalanche network
+      scheme: paymentOption.scheme,
+      network: paymentOption.network,
       payload: {
         signature: signature,
         authorization: {
@@ -168,6 +214,13 @@ async function signWithMetaMask(
           validAfter: String(validAfter),
           validBefore: String(validBefore),
           nonce: nonce
+        },
+        // Add contract info for verification
+        contract: paymentOption.asset,
+        domain: {
+          name: 'USD Coin',
+          version: '2',
+          chainId: targetChainId
         }
       }
     };
