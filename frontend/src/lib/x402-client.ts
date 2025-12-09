@@ -157,7 +157,7 @@ async function signWithMetaMask(
     // 5. Build x402 payment header (force 'avalanche' network)
     const paymentData = {
       x402Version: 1,
-      scheme: 'exact',
+      Scheme: 'exact',
       network: 'avalanche', // Force Avalanche network
       payload: {
         signature: signature,
