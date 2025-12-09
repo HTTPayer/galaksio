@@ -10,6 +10,23 @@
 !.yarn/releases
 !.yarn/versions
 
+.env.local
+
+# Documentation files (keep README.md)
+BROKER_API_INTEGRATION.md
+BROKER_API_QUICK_REF.md
+BROKER_INTEGRATION_SUMMARY.md
+CAMBIOS.md
+CANONICAL*.md
+COMPUTE_INTEGRATION.md
+IMPLEMENTATION_SUMMARY.md
+QUICK_REFERENCE.md
+SETUP.md
+STORAGE_INTEGRATION.md
+
+# Scripts (keep config files like eslint.config.mjs)
+check-job.mjs
+
 # testing
 /coverage
 
