@@ -75,7 +75,6 @@ async function brokerRequestWithPayment<T>(
     // Create payment authorization
     console.log('[Broker] Creating payment authorization...');
     const paymentResult = await createX402Payment(paymentRequirements, userAddress);
-    const paymentHeader = JSON.stringify(paymentResult);
     console.log('[Broker] Payment created, retrying request...');
 
     // Retry request with payment
@@ -84,7 +83,7 @@ async function brokerRequestWithPayment<T>(
       headers: {
         'Content-Type': 'application/json',
         ...options.headers,
-        'X-Payment': paymentHeader,
+        'X-Payment': paymentResult.paymentHeader,
       },
     });
     
@@ -320,14 +319,13 @@ export async function cache(params: {
 
       console.log('[Broker] Creating payment authorization...');
       const paymentResult = await createX402Payment(paymentRequirements, userAddress);
-      const paymentHeader = JSON.stringify(paymentResult);
       console.log('[Broker] Payment created, retrying cache upload...');
 
       response = await fetch(url, {
         method: 'POST',
         body: formData,
         headers: {
-          'X-Payment': paymentHeader,
+          'X-Payment': paymentResult.paymentHeader,
         },
       });
       
