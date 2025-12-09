@@ -75,6 +75,16 @@ async function brokerRequestWithPayment<T>(
     // Create payment authorization
     console.log('[Broker] Creating payment authorization...');
     const paymentResult = await createX402Payment(paymentRequirements, userAddress);
+    console.log('[Broker] Payment header (base64):', paymentResult.paymentHeader);
+    
+    // Debug: decode and log payment data
+    try {
+      const decoded = JSON.parse(Buffer.from(paymentResult.paymentHeader, 'base64').toString());
+      console.log('[Broker] Decoded payment data:', decoded);
+    } catch (e) {
+      console.error('[Broker] Failed to decode payment header:', e);
+    }
+    
     console.log('[Broker] Payment created, retrying request...');
 
     // Retry request with payment
