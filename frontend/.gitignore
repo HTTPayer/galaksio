@@ -27,6 +27,9 @@ STORAGE_INTEGRATION.md
 # Scripts (keep config files like eslint.config.mjs)
 check-job.mjs
 
+# Corrupted folders
+diagram/
+
 # testing
 /coverage
 
