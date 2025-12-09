@@ -90,7 +90,7 @@ export default function ComputePage() {
   const [code, setCode] = useState<string>(EXAMPLE_CODE.python || '');
   const [language, setLanguage] = useState<Language>("python");
   const [gpuType, setGpuType] = useState<GPUType>("l40s");
-  const [timeout, setTimeout] = useState<number>(60);
+  const [timeout, setTimeout] = useState<number>(300);
   const [onDemand, setOnDemand] = useState<boolean>(false);
   
   const [executing, setExecuting] = useState(false);
@@ -314,7 +314,7 @@ export default function ComputePage() {
 
                   <div className="space-y-2">
                     <Label htmlFor="timeout">Timeout (seconds)</Label>
-                    <Input id="timeout" type="number" value={timeout} onChange={(e) => setTimeout(parseInt(e.target.value) || 60)} min={1} max={3600} disabled={executing} />
+                    <Input id="timeout" type="number" value={timeout} onChange={(e) => setTimeout(parseInt(e.target.value) || 300)} min={60} max={3600} disabled={executing} />
                   </div>
                 </div>
 
