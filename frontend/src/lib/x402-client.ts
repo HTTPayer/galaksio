@@ -162,11 +162,16 @@ async function signWithMetaMask(
     // 2. Timestamps
     const validAfter = Math.floor(Date.now() / 1000);
     const validBefore = validAfter + 900; // Valid for 15 minutes
+    const deadline = validBefore; // EIP-2612 uses deadline instead of validBefore
 
     // 3. Build EIP-712 message for TransferWithAuthorization
     // Use token info from extra field if available
     const tokenName = paymentOption.extra?.name || 'USD Coin';
     const tokenVersion = paymentOption.extra?.version || '2';
+    
+    console.log('[X402] Token info:', { name: tokenName, version: tokenVersion, chainId: targetChainId });
+    console.log('[X402] Contract address:', paymentOption.asset);
+    console.log('[X402] Timestamps:', { validAfter, validBefore, deadline });
     
     const domain = {
       name: tokenName,
@@ -189,7 +194,7 @@ async function signWithMetaMask(
     const message = {
       from: userAddress,
       to: paymentOption.payTo,
-      value: paymentOption.maxAmountRequired,
+      value: parseInt(paymentOption.maxAmountRequired), // Convert to number for signing
       validAfter: validAfter,
       validBefore: validBefore,
       nonce: nonce
