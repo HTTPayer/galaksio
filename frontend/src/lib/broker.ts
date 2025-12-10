@@ -87,7 +87,7 @@ async function brokerRequestWithPayment<T>(
     
     console.log('[Broker] Payment created, retrying request...');
 
-    // Retry request with payment
+    // Retry request with payment header
     response = await fetch(url, {
       ...options,
       headers: {
