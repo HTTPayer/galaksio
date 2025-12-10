@@ -159,10 +159,10 @@ async function signWithMetaMask(
     crypto.getRandomValues(nonceBytes);
     const nonce = '0x' + Array.from(nonceBytes).map(b => b.toString(16).padStart(2, '0')).join('');
 
-    // 2. Timestamps
-    const validAfter = Math.floor(Date.now() / 1000);
-    const validBefore = validAfter + 900; // Valid for 15 minutes
-    const deadline = validBefore; // EIP-2612 uses deadline instead of validBefore
+    // 2. Timestamps - usar validAfter = 0 como en el ejemplo oficial
+    const now = Math.floor(Date.now() / 1000);
+    const validAfter = 0;
+    const validBefore = now + 3600; // 1 hour
 
     // 3. Build EIP-712 message for TransferWithAuthorization
     // Use token info from extra field if available
@@ -171,7 +171,7 @@ async function signWithMetaMask(
     
     console.log('[X402] Token info:', { name: tokenName, version: tokenVersion, chainId: targetChainId });
     console.log('[X402] Contract address:', paymentOption.asset);
-    console.log('[X402] Timestamps:', { validAfter, validBefore, deadline });
+    console.log('[X402] Timestamps:', { validAfter, validBefore });
     
     const domain = {
       name: tokenName,
@@ -181,6 +181,12 @@ async function signWithMetaMask(
     };
 
     const types = {
+      EIP712Domain: [
+        { name: 'name', type: 'string' },
+        { name: 'version', type: 'string' },
+        { name: 'chainId', type: 'uint256' },
+        { name: 'verifyingContract', type: 'address' }
+      ],
       TransferWithAuthorization: [
         { name: 'from', type: 'address' },
         { name: 'to', type: 'address' },
@@ -191,10 +197,11 @@ async function signWithMetaMask(
       ]
     };
 
+    // CRÍTICO: value debe ser NUMBER para la firma
     const message = {
       from: userAddress,
       to: paymentOption.payTo,
-      value: parseInt(paymentOption.maxAmountRequired), // Convert to number for signing
+      value: parseInt(paymentOption.maxAmountRequired), // NUMBER for signing
       validAfter: validAfter,
       validBefore: validBefore,
       nonce: nonce
@@ -206,8 +213,8 @@ async function signWithMetaMask(
       params: [
         userAddress,
         JSON.stringify({
-          domain,
           types,
+          domain,
           primaryType: 'TransferWithAuthorization',
           message
         })
@@ -215,6 +222,7 @@ async function signWithMetaMask(
     });
 
     // 5. Build x402 payment header
+    // Authorization usa STRINGS para enviar al backend
     const paymentData = {
       x402Version: 1,
       scheme: paymentOption.scheme,
@@ -224,17 +232,10 @@ async function signWithMetaMask(
         authorization: {
           from: userAddress,
           to: paymentOption.payTo,
-          value: String(paymentOption.maxAmountRequired),
-          validAfter: String(validAfter),
-          validBefore: String(validBefore),
+          value: paymentOption.maxAmountRequired, // STRING for backend
+          validAfter: validAfter.toString(),
+          validBefore: validBefore.toString(),
           nonce: nonce
-        },
-        // Add contract info for verification
-        contract: paymentOption.asset,
-        domain: {
-          name: tokenName,
-          version: tokenVersion,
-          chainId: targetChainId
         }
       }
     };
