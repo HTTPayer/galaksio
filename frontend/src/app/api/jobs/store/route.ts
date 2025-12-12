@@ -31,6 +31,9 @@ export async function POST(req: NextRequest) {
     // Get or create user account
     const account = await getOrCreateUserAccount();
 
+    // Handle both url and retrievalUrl from broker response
+    const retrievalUrl = body.result.retrievalUrl || body.result.url;
+
     // Create job record in database
     const job = await prisma.userJob.create({
       data: {
@@ -38,10 +41,10 @@ export async function POST(req: NextRequest) {
         kind: "store",
         brokerJobId: body.jobId,
         status: body.status,
-        txId: body.result.cid,
-        url: body.result.url,
+        txId: body.result.cid || body.result.entityKey,
+        url: retrievalUrl,
         provider: body.result.provider,
-        size: body.result.size,
+        size: body.result.size || body.result.dataSize,
         rawResult: JSON.parse(JSON.stringify(body)),
       },
     });

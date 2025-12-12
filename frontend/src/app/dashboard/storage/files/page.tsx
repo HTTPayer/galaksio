@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react';
 import { signIn } from 'next-auth/react';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   FileText, 
   Loader2,
@@ -11,7 +12,8 @@ import {
   ExternalLink,
   Copy,
   Calendar,
-  HardDrive
+  HardDrive,
+  Eye
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,6 +33,7 @@ interface StoredFile {
 
 export default function StoredFilesPage() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const [storedFiles, setStoredFiles] = useState<StoredFile[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
 
@@ -169,7 +172,7 @@ export default function StoredFilesPage() {
                   >
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex items-start gap-3 flex-1">
-                        <FileText className="h-5 w-5 text-blue-950 mt-1 flex-shrink-0" />
+                        <FileText className="h-5 w-5 text-blue-950 mt-1 shrink-0" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-2">
                             <Badge 
@@ -204,7 +207,9 @@ export default function StoredFilesPage() {
                                 </code>
                                 <button
                                   onClick={() => copyToClipboard(file.txId!)}
-                                  className="text-blue-950 hover:text-blue-800 flex-shrink-0"
+                                  className="text-blue-950 hover:text-blue-800 shrink-0"
+                                  aria-label="Copy transaction ID"
+                                  title="Copy to clipboard"
                                 >
                                   <Copy className="h-4 w-4" />
                                 </button>
@@ -237,6 +242,14 @@ export default function StoredFilesPage() {
                           </div>
                         </div>
                       </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => router.push(`/dashboard/storage/files/${file.id}`)}
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        View Details
+                      </Button>
                     </div>
                   </div>
                 ))}

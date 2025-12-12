@@ -2,6 +2,7 @@
 
 import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import {
   Play,
@@ -12,6 +13,7 @@ import {
   Cpu,
   Code,
   History,
+  Eye,
 } from "lucide-react";
 import { broker } from "@/lib/broker";
 import type {
@@ -46,28 +48,10 @@ const GPU_OPTIONS: { value: GPUType; label: string }[] = [
 ];
 
 const pythonExample = `# Example Python code
-print("Hello from Galaksio Compute!")
-
-# Calculate factorial
-def factorial(n):
-    if n <= 1:
-        return 1
-    return n * factorial(n - 1)
-
-result = factorial(5)
-print(f"Factorial of 5 is: {result}")`;
+print("Hello from Galaksio Compute!")`;
 
 const jsExample = `// Example JavaScript code
-console.log("Hello from Galaksio Compute!");
-
-// Calculate factorial
-function factorial(n) {
-  if (n <= 1) return 1;
-  return n * factorial(n - 1);
-}
-
-const result = factorial(5);
-console.log(\`Factorial of 5 is: \${result}\`);`;
+console.log("Hello from Galaksio Compute!");`;
 
 const EXAMPLE_CODE: Partial<Record<Language, string>> = {
   python: pythonExample,
@@ -86,6 +70,7 @@ interface JobRecord {
 
 export default function ComputePage() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const { walletAddress } = useWallet();
   const [code, setCode] = useState<string>(EXAMPLE_CODE.python || '');
   const [language, setLanguage] = useState<Language>("python");
@@ -97,6 +82,7 @@ export default function ComputePage() {
   const [executionResult, setExecutionResult] = useState<{
     jobId: string;
     status: string;
+    savedJobId?: string;
     result: {
       stdout: string;
       stderr: string;
@@ -171,8 +157,6 @@ export default function ComputePage() {
         on_demand: onDemand,
       });
 
-      setExecutionResult(brokerResult);
-
       // Save to internal API
       const saveResponse = await fetch('/api/jobs/run', {
         method: 'POST',
@@ -180,9 +164,15 @@ export default function ComputePage() {
         body: JSON.stringify(brokerResult),
       });
 
-      if (!saveResponse.ok) {
+      let savedJobId: string | undefined;
+      if (saveResponse.ok) {
+        const savedJob = await saveResponse.json();
+        savedJobId = savedJob.id;
+      } else {
         console.error('Failed to save job to database');
       }
+      
+      setExecutionResult({ ...brokerResult, savedJobId });
       
       if (brokerResult.result.stdout) {
         toast.success("Code executed successfully!");
@@ -401,6 +391,18 @@ export default function ComputePage() {
                       </div>
                     )}
                   </div>
+                  
+                  {executionResult.savedJobId && (
+                    <div className="pt-4 border-t">
+                      <Button
+                        onClick={() => router.push(`/dashboard/deployments/${executionResult.savedJobId}`)}
+                        className="w-full bg-blue-950 hover:bg-blue-900 text-white"
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        View Deployment Details
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -428,8 +430,8 @@ export default function ComputePage() {
                   <p className="text-center py-8 text-zinc-500 text-sm">No recent jobs</p>
                 ) : (
                   <div className="space-y-3">
-                    {recentJobs.slice(0, 10).map((job) => (
-                      <div key={job.id} className="rounded-lg border border-zinc-200 p-3 space-y-2">
+                    {recentJobs.slice(0, 5).map((job) => (
+                      <div key={job.id} className="rounded-lg border border-zinc-200 p-3 space-y-2 hover:bg-zinc-50 transition-colors">
                         <div className="flex items-center justify-between">
                           <div className={`flex items-center gap-2 ${getStateColor(job.status)}`}>
                             {getStateIcon(job.status)}
@@ -449,6 +451,15 @@ export default function ComputePage() {
                             {new Date(job.createdAt).toLocaleString()}
                           </p>
                         </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => router.push(`/dashboard/deployments/${job.id}`)}
+                          className="w-full text-xs"
+                        >
+                          <Eye className="h-3 w-3 mr-1" />
+                          View Details
+                        </Button>
                       </div>
                     ))}
                   </div>

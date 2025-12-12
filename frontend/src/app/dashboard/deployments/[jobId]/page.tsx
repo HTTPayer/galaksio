@@ -198,6 +198,33 @@ export default function DeploymentDetailPage() {
       }
       
       setJob(foundJob);
+      
+      // Auto-refresh if job is completed but missing output
+      if (foundJob.status.toLowerCase() === 'completed' && !foundJob.stdout && !foundJob.stderr) {
+        console.log('[DEPLOYMENT] Auto-refreshing job for complete data');
+        setTimeout(async () => {
+          try {
+            const refreshResponse = await fetch(`/api/jobs/${foundJob.brokerJobId}/refresh`, {
+              method: 'PATCH',
+            });
+            
+            if (refreshResponse.ok) {
+              // Reload jobs to get updated data
+              const updatedResponse = await fetch('/api/jobs');
+              if (updatedResponse.ok) {
+                const updatedJobs = await updatedResponse.json();
+                const updatedJob = updatedJobs.find((j: JobRecord) => j.id === jobId);
+                if (updatedJob) {
+                  setJob(updatedJob);
+                  console.log('[DEPLOYMENT] Job refreshed with complete data');
+                }
+              }
+            }
+          } catch (error) {
+            console.error('[DEPLOYMENT] Auto-refresh failed:', error);
+          }
+        }, 500);
+      }
     } catch (error) {
       console.error("Error loading job:", error);
       toast.error("Failed to load deployment details");

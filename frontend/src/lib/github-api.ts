@@ -16,12 +16,12 @@ export interface GitHubRepo {
 }
 
 export interface GitHubFile {
-  name: string;
+  name?: string; // Optional, will be extracted from path if needed
   path: string;
   sha: string;
   size: number;
-  type: 'file' | 'dir';
-  download_url: string | null;
+  type: 'file' | 'dir' | 'blob'; // GitHub API can return 'blob'
+  download_url?: string | null;
 }
 
 export interface GitHubFileContent {
@@ -76,7 +76,9 @@ export async function getRepoTree(
   repo: string,
   branch: string = 'main'
 ): Promise<GitHubFile[]> {
-  // Try main branch first
+  console.log(`Fetching tree for ${owner}/${repo} on branch ${branch}`);
+  
+  // Try the specified branch first
   let response = await fetch(
     `https://api.github.com/repos/${owner}/${repo}/git/trees/${branch}?recursive=1`,
     {
@@ -87,8 +89,9 @@ export async function getRepoTree(
     }
   );
 
-  // If main doesn't exist, try master
+  // If specified branch doesn't exist, try common branch names
   if (response.status === 404) {
+    console.log(`Branch ${branch} not found, trying 'master'`);
     response = await fetch(
       `https://api.github.com/repos/${owner}/${repo}/git/trees/master?recursive=1`,
       {
@@ -101,11 +104,23 @@ export async function getRepoTree(
   }
 
   if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`Failed to fetch repo tree: ${response.status} ${response.statusText}`, errorText);
     throw new Error(`Failed to fetch repo tree: ${response.statusText}`);
   }
 
   const data = await response.json();
-  return data.tree || [];
+  const tree = data.tree || [];
+  const truncated = data.truncated || false;
+  
+  console.log(`Tree retrieved: ${tree.length} items${truncated ? ' (TRUNCATED)' : ''}`);
+  console.log('Sample files:', tree.slice(0, 10).map((f: GitHubFile) => `${f.path} (${f.type})`));
+  
+  if (truncated) {
+    console.warn('Tree was truncated by GitHub API. Some files may be missing.');
+  }
+  
+  return tree;
 }
 
 /**
@@ -139,31 +154,77 @@ export async function getFileContent(
 }
 
 /**
- * Filter files by extension (.py, .js)
+ * Filter files by extension (.py, .js, .ts, .mjs, .cjs)
  */
 export function filterExecutableFiles(files: GitHubFile[]): GitHubFile[] {
-  return files.filter(file => {
-    if (file.type !== 'file') return false;
-    const ext = file.name.split('.').pop()?.toLowerCase();
-    return ext === 'py' || ext === 'js';
+  console.log(`Filtering ${files.length} total items...`);
+  
+  const filtered = files.filter(file => {
+    // Asegurarse de que es un archivo (blob o file)
+    // GitHub API usa 'blob' para archivos en el tree endpoint
+    if (!file || (file.type !== 'file' && file.type !== 'blob')) {
+      return false;
+    }
+    
+    // Validar que tenga un path
+    if (!file.path) return false;
+    
+    // Obtener el nombre del archivo desde el path
+    const pathParts = file.path.split('/');
+    const fileName = pathParts[pathParts.length - 1];
+    
+    if (!fileName) return false;
+    
+    // Obtener la extensión
+    const parts = fileName.split('.');
+    if (parts.length < 2) return false; // No tiene extensión
+    
+    const ext = parts.pop()?.toLowerCase();
+    
+    // Filtrar por extensiones soportadas
+    const supportedExtensions = ['py', 'js', 'ts', 'mjs', 'cjs', 'jsx', 'tsx'];
+    const isSupported = ext ? supportedExtensions.includes(ext) : false;
+    
+    if (isSupported) {
+      console.log(`✓ Found: ${file.path} (${ext})`);
+    }
+    
+    return isSupported;
   });
+  
+  console.log(`Filtered to ${filtered.length} executable files`);
+  return filtered;
 }
 
 /**
  * Check if file is Python or JavaScript
  */
 export function isExecutableFile(filename: string): boolean {
-  const ext = filename.split('.').pop()?.toLowerCase();
-  return ext === 'py' || ext === 'js';
+  if (!filename) return false;
+  const parts = filename.split('.');
+  if (parts.length < 2) return false;
+  const ext = parts.pop()?.toLowerCase();
+  const supportedExtensions = ['py', 'js', 'ts', 'mjs', 'cjs', 'jsx', 'tsx'];
+  return ext ? supportedExtensions.includes(ext) : false;
 }
 
 /**
  * Get language from file extension
  */
 export function getLanguageFromFile(filename: string): 'python' | 'javascript' | null {
-  const ext = filename.split('.').pop()?.toLowerCase();
+  if (!filename) return null;
+  const parts = filename.split('.');
+  if (parts.length < 2) return null;
+  const ext = parts.pop()?.toLowerCase();
+  
+  // Python
   if (ext === 'py') return 'python';
-  if (ext === 'js') return 'javascript';
+  
+  // JavaScript/TypeScript (todos se ejecutan como JavaScript en Node.js)
+  if (ext === 'js' || ext === 'ts' || ext === 'mjs' || ext === 'cjs' || ext === 'jsx' || ext === 'tsx') {
+    return 'javascript';
+  }
+  
   return null;
 }
 

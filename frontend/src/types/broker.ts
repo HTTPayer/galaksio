@@ -14,15 +14,19 @@
  * Safe fields for UI:
  * - jobId, status
  * - result.cid, result.url, result.provider, result.size
+ * - result.retrievalUrl, result.entityKey, result.dataSize (alternative names)
  */
 export interface BrokerStoreResponse {
   jobId: string;
   status: string;
   result: {
-    cid: string;
-    url: string;
+    cid?: string;
+    entityKey?: string;
+    url?: string;
+    retrievalUrl?: string;
     provider: string;
-    size: number;
+    size?: number;
+    dataSize?: number;
   };
 }
 

@@ -61,7 +61,7 @@ export default function DeploymentsPage() {
   const loadJobs = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/jobs');
+      const response = await fetch('/api/jobs?kind=run');
       if (!response.ok) throw new Error('Failed to load jobs');
       const data = await response.json();
       setJobs(data);
@@ -120,13 +120,14 @@ export default function DeploymentsPage() {
     }
   };
 
-  // Calculate stats
-  const totalJobs = jobs.length;
-  const activeJobs = jobs.filter(j => 
+  // Calculate stats - only count compute (run) jobs
+  const computeJobs = jobs.filter(j => j.kind === 'run');
+  const totalJobs = computeJobs.length;
+  const activeJobs = computeJobs.filter(j => 
     ['running', 'executing', 'queued', 'awaiting_payment'].includes(j.status.toLowerCase())
   ).length;
-  const completedJobs = jobs.filter(j => j.status.toLowerCase() === 'completed').length;
-  const failedJobs = jobs.filter(j => j.status.toLowerCase() === 'failed').length;
+  const completedJobs = computeJobs.filter(j => j.status.toLowerCase() === 'completed').length;
+  const failedJobs = computeJobs.filter(j => j.status.toLowerCase() === 'failed').length;
 
   if (status === "loading" || loading) {
     return (
