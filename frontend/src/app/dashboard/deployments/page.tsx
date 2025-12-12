@@ -61,7 +61,7 @@ export default function DeploymentsPage() {
   const loadJobs = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/jobs');
+      const response = await fetch('/api/jobs?kind=run');
       if (!response.ok) throw new Error('Failed to load jobs');
       const data = await response.json();
       setJobs(data);

@@ -38,12 +38,21 @@ interface JobRecord {
   updatedAt: string;
   rawResult: {
     result?: {
-      filename?: string;
-      contentType?: string;
-      platform?: string;
-      permanent?: boolean;
-      ttl?: number;
-      ttlHours?: number;
+      result?: {
+        filename?: string;
+        contentType?: string;
+        platform?: string;
+        permanent?: boolean;
+        ttl?: number;
+        ttlHours?: number;
+        retrievalUrl?: string;
+        arweaveUrl?: string;
+        arweaveTxId?: string;
+        dataSize?: number;
+        entityKey?: string;
+        txHash?: string;
+        success?: boolean;
+      };
     };
   } | null;
 }
@@ -81,10 +90,18 @@ export default function StorageDetailPage() {
       const foundJob = jobs.find(j => j.id === jobId);
       
       if (foundJob) {
+        console.log("Found job:", foundJob);
+        console.log("Raw result:", foundJob.rawResult);
         setJob(foundJob);
         // Automatically fetch storage data if available
-        if (foundJob.url) {
-          fetchStorageData(foundJob.url);
+        const retrievalUrl = foundJob.rawResult?.result?.result?.retrievalUrl 
+          || foundJob.rawResult?.result?.result?.arweaveUrl 
+          || foundJob.url;
+        console.log("Retrieval URL to fetch:", retrievalUrl);
+        if (retrievalUrl) {
+          fetchStorageData(retrievalUrl);
+        } else {
+          console.warn("No retrieval URL found");
         }
       } else {
         toast.error("Job not found");
@@ -107,20 +124,59 @@ export default function StorageDetailPage() {
   const fetchStorageData = async (retrievalUrl: string) => {
     setLoadingData(true);
     setContentError("");
+    console.log("Fetching storage data from:", retrievalUrl);
     try {
-      const response = await fetch(retrievalUrl);
-      if (!response.ok) throw new Error('Failed to fetch storage data');
+      const response = await fetch(retrievalUrl, {
+        method: 'GET',
+      });
       
-      const data: StorageData = await response.json();
-
-      // Decode base64 data if present
-      if (data.data) {
+      console.log("Response status:", response.status);
+      console.log("Response headers:", response.headers);
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch storage data: ${response.status} ${response.statusText}`);
+      }
+      
+      const contentType = response.headers.get('content-type');
+      console.log("Content-Type:", contentType);
+      
+      // For Arweave, the response is the raw file content (base64 encoded)
+      if (retrievalUrl.includes('arweave.net') || retrievalUrl.includes('galaksio-storage')) {
+        const text = await response.text();
+        console.log("Arweave/Galaksio raw content (base64):", text);
+        
+        // Try to decode from base64
         try {
-          const decoded = atob(data.data);
+          const decoded = atob(text);
+          console.log("Decoded content:", decoded);
           setDecodedContent(decoded);
+          toast.success("File content loaded successfully");
         } catch (e) {
-          console.error("Error decoding base64:", e);
-          setContentError("Failed to decode content");
+          // If it fails, it might not be base64, use as-is
+          console.warn("Not base64, using raw text:", e);
+          setDecodedContent(text);
+          toast.success("File content loaded successfully");
+        }
+      } else {
+        // For other providers (like Arkiv), try JSON with base64 data field
+        const data: StorageData = await response.json();
+        console.log("Received data:", data);
+
+        // Decode base64 data if present
+        if (data.data) {
+          try {
+            const decoded = atob(data.data);
+            console.log("Decoded content:", decoded);
+            setDecodedContent(decoded);
+            toast.success("File content loaded successfully");
+          } catch (e) {
+            console.error("Error decoding base64:", e);
+            setContentError("Failed to decode content");
+            toast.error("Failed to decode file content");
+          }
+        } else {
+          console.warn("No 'data' field in response");
+          setContentError("No data field in response");
         }
       }
     } catch (error) {
@@ -140,9 +196,10 @@ export default function StorageDetailPage() {
   const downloadContent = () => {
     if (!decodedContent || !job) return;
     
-    const filename = job.rawResult?.result?.filename || `storage-${job.brokerJobId}.txt`;
+    const resultData = job.rawResult?.result?.result;
+    const filename = resultData?.filename || `storage-${job.brokerJobId}.txt`;
     const blob = new Blob([decodedContent], { 
-      type: job.rawResult?.result?.contentType || 'text/plain' 
+      type: resultData?.contentType || 'text/plain' 
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -218,6 +275,9 @@ export default function StorageDetailPage() {
     );
   }
 
+  // Helper to get the actual result data (handles nested structure)
+  const getResultData = () => job?.rawResult?.result?.result;
+
   return (
     <div className="p-8 space-y-8 max-w-7xl mx-auto bg-white">
       {/* Header */}
@@ -230,7 +290,7 @@ export default function StorageDetailPage() {
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-zinc-900">Storage File Details</h1>
             <p className="text-zinc-600 mt-2">
-              {job.rawResult?.result?.filename || 'Stored file'}
+              {getResultData()?.filename || 'Stored file'}
             </p>
           </div>
         </div>
@@ -258,18 +318,16 @@ export default function StorageDetailPage() {
             </div>
             <div>
               <p className="text-sm text-zinc-500 mb-1">Provider</p>
-              <p className="font-medium text-zinc-900">{job.provider || 'N/A'}</p>
+              <p className="font-medium text-zinc-900">{job.provider || 'Galaksio Storage'}</p>
             </div>
             <div>
               <p className="text-sm text-zinc-500 mb-1">Platform</p>
-              <p className="font-medium text-zinc-900">
-                {job.rawResult?.result?.platform || 'N/A'}
-              </p>
+              <p className="font-medium text-zinc-900">Galaksio OS</p>
             </div>
             <div>
               <p className="text-sm text-zinc-500 mb-1">Storage Type</p>
               <p className="font-medium text-zinc-900">
-                {job.rawResult?.result?.permanent ? 'Permanent' : 'Temporary'}
+                {getResultData()?.permanent ? 'Permanent' : 'Temporary'}
               </p>
             </div>
           </div>
@@ -290,14 +348,14 @@ export default function StorageDetailPage() {
               <p className="text-sm text-zinc-500 mb-1">Filename</p>
               <div className="flex items-center gap-2">
                 <p className="font-mono text-sm text-zinc-900">
-                  {job.rawResult?.result?.filename || 'Unknown'}
+                  {getResultData()?.filename || 'Unknown'}
                 </p>
               </div>
             </div>
             <div>
               <p className="text-sm text-zinc-500 mb-1">Content Type</p>
               <p className="font-mono text-sm text-zinc-900">
-                {job.rawResult?.result?.contentType || 'N/A'}
+                {getResultData()?.contentType || 'N/A'}
               </p>
             </div>
             <div>
@@ -305,15 +363,15 @@ export default function StorageDetailPage() {
               <div className="flex items-center gap-2">
                 <HardDrive className="h-4 w-4 text-zinc-500" />
                 <p className="font-medium text-zinc-900">
-                  {job.size ? formatBytes(job.size) : 'N/A'}
+                  {getResultData()?.dataSize ? formatBytes(getResultData()!.dataSize!) : (job.size ? formatBytes(job.size) : 'N/A')}
                 </p>
               </div>
             </div>
-            {job.rawResult?.result?.ttlHours && (
+            {getResultData()?.ttlHours && (
               <div>
                 <p className="text-sm text-zinc-500 mb-1">TTL (Time to Live)</p>
                 <p className="font-medium text-zinc-900">
-                  {job.rawResult.result.ttlHours} hours
+                  {getResultData()!.ttlHours} hours
                 </p>
               </div>
             )}
@@ -326,80 +384,6 @@ export default function StorageDetailPage() {
                 </p>
               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Storage Details */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Database className="h-5 w-5" />
-            Storage Details
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3">
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-sm text-zinc-500">Job ID</p>
-                <Button 
-                  onClick={() => copyToClipboard(job.brokerJobId, "Job ID")} 
-                  variant="ghost" 
-                  size="sm"
-                >
-                  <Copy className="h-3 w-3" />
-                </Button>
-              </div>
-              <p className="font-mono text-sm text-zinc-900 break-all bg-zinc-50 p-2 rounded">
-                {job.brokerJobId}
-              </p>
-            </div>
-
-            {job.txId && (
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm text-zinc-500">Entity Key / CID</p>
-                  <Button 
-                    onClick={() => copyToClipboard(job.txId!, "Entity Key")} 
-                    variant="ghost" 
-                    size="sm"
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
-                </div>
-                <p className="font-mono text-sm text-zinc-900 break-all bg-zinc-50 p-2 rounded">
-                  {job.txId}
-                </p>
-              </div>
-            )}
-
-            {job.url && (
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm text-zinc-500">Retrieval URL</p>
-                  <div className="flex gap-2">
-                    <Button 
-                      onClick={() => copyToClipboard(job.url!, "URL")} 
-                      variant="ghost" 
-                      size="sm"
-                    >
-                      <Copy className="h-3 w-3" />
-                    </Button>
-                    <Button 
-                      onClick={() => window.open(job.url!, '_blank')} 
-                      variant="ghost" 
-                      size="sm"
-                    >
-                      <ExternalLink className="h-3 w-3" />
-                    </Button>
-                  </div>
-                </div>
-                <p className="font-mono text-xs text-zinc-900 break-all bg-zinc-50 p-2 rounded">
-                  {job.url}
-                </p>
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>
@@ -436,9 +420,9 @@ export default function StorageDetailPage() {
                 <p className="font-medium">Error loading content</p>
               </div>
               <p className="text-sm text-red-700 mt-2">{contentError}</p>
-              {job.url && (
+              {(getResultData()?.retrievalUrl || getResultData()?.arweaveUrl || job.url) && (
                 <Button 
-                  onClick={() => fetchStorageData(job.url!)} 
+                  onClick={() => fetchStorageData(getResultData()?.retrievalUrl || getResultData()?.arweaveUrl || job.url!)} 
                   variant="outline" 
                   size="sm"
                   className="mt-3"
@@ -460,6 +444,84 @@ export default function StorageDetailPage() {
               <p>No content available</p>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Storage Details */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="h-5 w-5" />
+            Storage Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-sm text-zinc-500">Job ID</p>
+                <Button 
+                  onClick={() => copyToClipboard(job.brokerJobId, "Job ID")} 
+                  variant="ghost" 
+                  size="sm"
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+              <p className="font-mono text-sm text-zinc-900 break-all bg-zinc-50 p-2 rounded">
+                {job.brokerJobId}
+              </p>
+            </div>
+
+            {(getResultData()?.entityKey || getResultData()?.arweaveTxId || job.txId) && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm text-zinc-500">
+                    {getResultData()?.arweaveTxId ? 'Arweave TX ID' : 'Entity Key / CID'}
+                  </p>
+                  <Button 
+                    onClick={() => copyToClipboard(getResultData()?.arweaveTxId || getResultData()?.entityKey || job.txId!, getResultData()?.arweaveTxId ? "Arweave TX ID" : "Entity Key")} 
+                    variant="ghost" 
+                    size="sm"
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+                <p className="font-mono text-sm text-zinc-900 break-all bg-zinc-50 p-2 rounded">
+                  {getResultData()?.arweaveTxId || getResultData()?.entityKey || job.txId}
+                </p>
+              </div>
+            )}
+
+            {(getResultData()?.retrievalUrl || getResultData()?.arweaveUrl || job.url) && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-sm text-zinc-500">
+                    {getResultData()?.arweaveUrl ? 'Arweave URL' : 'Retrieval URL'}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={() => copyToClipboard(getResultData()?.arweaveUrl || getResultData()?.retrievalUrl || job.url!, "URL")} 
+                      variant="ghost" 
+                      size="sm"
+                    >
+                      <Copy className="h-3 w-3" />
+                    </Button>
+                    <Button 
+                      onClick={() => window.open(getResultData()?.arweaveUrl || getResultData()?.retrievalUrl || job.url!, '_blank')} 
+                      variant="ghost" 
+                      size="sm"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+                <p className="font-mono text-xs text-zinc-900 break-all bg-zinc-50 p-2 rounded">
+                  {getResultData()?.arweaveUrl || getResultData()?.retrievalUrl || job.url}
+                </p>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 

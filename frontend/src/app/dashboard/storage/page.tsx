@@ -3,6 +3,7 @@
 import { useSession } from 'next-auth/react';
 import { signIn } from 'next-auth/react';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Upload, 
   FileText, 
@@ -13,7 +14,8 @@ import {
   Copy,
   Clock,
   Infinity,
-  Info
+  Info,
+  Eye
 } from 'lucide-react';
 import { broker } from '@/lib/broker';
 import { Button } from '@/components/ui/button';
@@ -29,6 +31,7 @@ type StorageProvider = 'galaksio-storage' | 'spuro' | 'openx402';
 
 export default function StoragePage() {
   const { data: session, status } = useSession();
+  const router = useRouter();
   const { walletAddress } = useWallet();
   const [uploadMode, setUploadMode] = useState<'file' | 'text'>('file');
   
@@ -46,6 +49,7 @@ export default function StoragePage() {
   const [uploadResult, setUploadResult] = useState<{
     jobId: string;
     status: string;
+    savedJobId?: string;
     result: {
       cid: string;
       url: string;
@@ -114,8 +118,6 @@ export default function StoragePage() {
         });
       }
       
-      setUploadResult(brokerResult);
-
       // Save to internal API
       const saveResponse = await fetch('/api/jobs/store', {
         method: 'POST',
@@ -123,9 +125,15 @@ export default function StoragePage() {
         body: JSON.stringify(brokerResult),
       });
 
-      if (!saveResponse.ok) {
+      let savedJobId: string | undefined;
+      if (saveResponse.ok) {
+        const savedJob = await saveResponse.json();
+        savedJobId = savedJob.id;
+      } else {
         console.error('Failed to save file record to database');
       }
+      
+      setUploadResult({ ...brokerResult, savedJobId });
       
       toast.success('File uploaded successfully!');
       
@@ -549,23 +557,6 @@ export default function StoragePage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-3">
-                    <div>
-                      <Label className="text-green-800">Content ID (CID)</Label>
-                      <div className="flex items-center gap-2 mt-1">
-                        <code className="flex-1 rounded bg-green-100 px-3 py-2 text-xs text-green-900 break-all font-mono">
-                          {uploadResult.result.cid}
-                        </code>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => copyToClipboard(uploadResult.result.cid)}
-                          className="shrink-0"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <Label className="text-green-800 text-xs">Status</Label>
@@ -587,17 +578,17 @@ export default function StoragePage() {
                       </div>
                     </div>
 
-                    <div className="pt-2">
-                      <a
-                        href={uploadResult.result.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 transition-colors"
-                      >
-                        View File
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    </div>
+                    {uploadResult.savedJobId && (
+                      <div className="pt-2">
+                        <Button
+                          onClick={() => router.push(`/dashboard/storage/files/${uploadResult.savedJobId}`)}
+                          className="w-full bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View File Details
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

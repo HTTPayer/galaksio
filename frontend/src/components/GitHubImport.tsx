@@ -56,7 +56,7 @@ export default function GitHubImport({ accessToken, onImport }: GitHubImportProp
       setFilteredFiles(
         files.filter(file => 
           file.path.toLowerCase().includes(query) || 
-          file.name.toLowerCase().includes(query)
+          (file.name?.toLowerCase().includes(query) ?? false)
         )
       );
     }
@@ -89,14 +89,21 @@ export default function GitHubImport({ accessToken, onImport }: GitHubImportProp
 
     try {
       const [owner, name] = repo.full_name.split('/');
+      console.log(`Loading files from ${owner}/${name} (branch: ${repo.default_branch})`);
+      
       const tree = await getRepoTree(accessToken, owner, name, repo.default_branch);
+      console.log(`Total files in tree: ${tree.length}`);
+      
       const executableFiles = filterExecutableFiles(tree);
+      console.log(`Executable files found: ${executableFiles.length}`, executableFiles.map(f => f.path));
       
       setFiles(executableFiles);
       setFilteredFiles(executableFiles);
       
       if (executableFiles.length === 0) {
         toast.error("No Python or JavaScript files found in this repo");
+      } else {
+        toast.success(`Found ${executableFiles.length} file(s)`);
       }
     } catch (error) {
       console.error("Error loading repo files:", error);
@@ -119,15 +126,18 @@ export default function GitHubImport({ accessToken, onImport }: GitHubImportProp
     try {
       const [owner, name] = selectedRepo.full_name.split('/');
       const content = await getFileContent(accessToken, owner, name, selectedFile.path);
-      const language = getLanguageFromFile(selectedFile.name);
+      
+      // Extract filename from path
+      const fileName = selectedFile.path.split('/').pop() || 'file';
+      const language = getLanguageFromFile(fileName);
 
       if (!language) {
         toast.error("Unsupported file type");
         return;
       }
 
-      onImport(content, language, selectedFile.name);
-      toast.success(`Imported ${selectedFile.name}`);
+      onImport(content, language, fileName);
+      toast.success(`Imported ${fileName}`);
       
       // Reset state
       setSelectedRepo(null);
@@ -236,7 +246,7 @@ export default function GitHubImport({ accessToken, onImport }: GitHubImportProp
                     <FileCode className="h-4 w-4 flex-shrink-0" />
                     <span className="flex-1 truncate">{file.path}</span>
                     <Badge variant="outline" className="text-xs">
-                      {file.name.endsWith('.py') ? 'py' : 'js'}
+                      {file.path.split('.').pop()?.toLowerCase() || 'file'}
                     </Badge>
                   </button>
                 ))}
@@ -260,7 +270,7 @@ export default function GitHubImport({ accessToken, onImport }: GitHubImportProp
             ) : (
               <>
                 <FileCode className="mr-2 h-4 w-4" />
-                Import {selectedFile.name}
+                Import {selectedFile.path.split('/').pop()}
               </>
             )}
           </Button>
